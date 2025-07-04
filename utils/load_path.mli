@@ -118,3 +118,17 @@ val prepend_dir : Dir.t -> unit
 val get_visible : unit -> Dir.t list
 (** Same as [get_paths ()], except that it returns a [Dir.t list], and doesn't
     include the -H paths. *)
+
+type _ Effect.t +=
+  | Load_path : (string * auto_include_callback ref) -> string Effect.t
+  | Load_path_normalized :
+      (string * auto_include_callback ref) -> (string * visibility) Effect.t
+  | Append_dir  : Dir.t -> unit Effect.t
+  | Prepend_dir : Dir.t -> unit Effect.t
+  | Remove_dir  : string -> unit Effect.t
+  | Reset_path  : unit Effect.t
+  | Init_path   : (string list * string list) -> unit Effect.t
+  | Get_visible : Dir.t list Effect.t
+  | Get_path_list : string list Effect.t
+  | Get_paths : paths Effect.t
+
