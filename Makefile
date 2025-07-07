@@ -198,7 +198,8 @@ comp_SOURCES = \
   driver/main_args.mli driver/main_args.ml \
   driver/compmisc.mli driver/compmisc.ml \
   driver/makedepend.mli driver/makedepend.ml \
-  driver/compile_common.mli driver/compile_common.ml
+  driver/compile_common.mli driver/compile_common.ml \
+  driver/handler_common.mli driver/handler_common.ml
 # All file format descriptions (including cmx{,s}) are in the
 # ocamlcommon library so that ocamlobjinfo can depend on them.
 
