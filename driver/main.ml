@@ -25,6 +25,13 @@ let is_basename fn = Filename.basename fn = fn
 let get_visible_path_list () = List.rev_map Dir.path !visible_dirs
 let get_hidden_path_list () = List.rev_map Dir.path !hidden_dirs
 
+let auto_include find_in_dir fn =
+  if !Clflags.no_std_include then
+    raise Not_found
+  else
+    let alert = Location.auto_include_alert in
+    Load_path.auto_include_otherlibs alert find_in_dir fn
+
 let prepend_add dir =
   List.iter (fun base ->
       Result.iter (fun filename ->
@@ -48,7 +55,7 @@ let () =
     effc = fun (type c) (eff: c Effect.t) ->
       match eff with
       (* find : string -> string *)
-      | Load_path (fn, auto_include_callback) ->
+      | Load_path fn ->
         Some (fun (k: (c, _) continuation) ->
           let ret =
             try
@@ -57,12 +64,12 @@ let () =
               else
                 Misc.find_in_path (get_path_list ()) fn
             with Not_found ->
-              !auto_include_callback Dir.find fn;
+              auto_include Dir.find fn;
             in
           continue k ret
         )
 
-      | Load_path_normalized (fn, auto_include_callback) ->
+      | Load_path_normalized fn ->
         Some (fun (k: (c, _) continuation) ->
           match Misc.normalized_unit_filename fn with
           | Error _ -> raise Not_found
@@ -79,7 +86,7 @@ let () =
                 | Not_found ->
                   (Misc.find_in_path_normalized (get_hidden_path_list ()) fn, Hidden)
             with Not_found ->
-              (!auto_include_callback Dir.find_normalized fn_uncap, Visible)
+              auto_include Dir.find_normalized fn_uncap, Visible
             in
           continue k ret
         )

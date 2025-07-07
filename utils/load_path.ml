@@ -58,7 +58,6 @@ type auto_include_callback =
   (Dir.t -> string -> string option) -> string -> string
 
 let no_auto_include _ _ = raise Not_found
-let auto_include_callback = ref no_auto_include
 
 type visibility = Visible | Hidden
 
@@ -67,9 +66,8 @@ type paths =
     hidden : string list }
 
 type _ Effect.t +=
-  | Load_path : (string * auto_include_callback ref) -> string Effect.t
-  | Load_path_normalized :
-      (string * auto_include_callback ref) -> (string * visibility) Effect.t
+  | Load_path : string -> string Effect.t
+  | Load_path_normalized : string -> (string * visibility) Effect.t
   | Append_dir  : Dir.t -> unit Effect.t
   | Prepend_dir : Dir.t -> unit Effect.t
   | Remove_dir  : string -> unit Effect.t
@@ -81,8 +79,7 @@ type _ Effect.t +=
 
 let reset () =
   assert (not Config.merlin || Local_store.is_bound ());
-  perform Reset_path;
-  auto_include_callback := no_auto_include
+  perform Reset_path
 
 let get_visible () = perform Get_visible
 
@@ -90,10 +87,10 @@ let get_path_list () = perform Get_path_list
 
 let get_paths () = perform Get_paths
 
-let init ~auto_include ~visible ~hidden =
+(* unused variable auto_include *)
+let [@ocaml.warning "-27"] init ~auto_include ~visible ~hidden =
   reset ();
-  perform (Init_path (visible, hidden));
-  auto_include_callback := auto_include
+  perform (Init_path (visible, hidden))
 
 let remove_dir dir =
   assert (not Config.merlin || Local_store.is_bound ());
@@ -140,10 +137,10 @@ let auto_include_otherlibs =
 
 let find fn =
   assert (not Config.merlin || Local_store.is_bound ());
-  perform (Load_path (fn, auto_include_callback))
+  perform (Load_path fn)
 
 let find_normalized_with_visibility fn =
   assert (not Config.merlin || Local_store.is_bound ());
-  perform (Load_path_normalized (fn, auto_include_callback))
+  perform (Load_path_normalized fn)
 
 let find_normalized fn = fst (find_normalized_with_visibility fn)
