@@ -75,9 +75,6 @@ let load_plugin file =
 ;;
 List.iter load_plugin plugins
 
-let () = Odoc_args.parse ()
-
-
 let loaded_modules =
   List.flatten
     (List.map
@@ -97,31 +94,32 @@ let loaded_modules =
 
 let modules = Odoc_analyse.analyse_files ~init: loaded_modules !Odoc_global.files
 
-let _ =
-  match !Odoc_global.dump with
-    None -> ()
-  | Some f ->
-      try Odoc_analyse.dump_modules f modules
-      with Failure s ->
-        prerr_endline s ;
-        incr Odoc_global.errors
+let () =
+  let run () =
+    Odoc_args.parse ();
+    match !Odoc_global.dump with
+      None -> ()
+    | Some f ->
+        try Odoc_analyse.dump_modules f modules
+        with Failure s ->
+          prerr_endline s ;
+          incr Odoc_global.errors;
 
+    match !Odoc_args.current_generator with
+      None ->
+        ()
+    | Some gen ->
+        let generator = Odoc_gen.get_minimal_generator gen in
+        Odoc_info.verbose Odoc_messages.generating_doc;
+        generator#generate modules;
+        Odoc_info.verbose Odoc_messages.ok;
 
-let _ =
-  match !Odoc_args.current_generator with
-    None ->
-      ()
-  | Some gen ->
-      let generator = Odoc_gen.get_minimal_generator gen in
-      Odoc_info.verbose Odoc_messages.generating_doc;
-      generator#generate modules;
-      Odoc_info.verbose Odoc_messages.ok
-
-let _ =
-  if !Odoc_global.errors > 0 then
-  (
-   prerr_endline (Odoc_messages.errors_occured !Odoc_global.errors) ;
-   exit 1
-  )
-  else
-    exit 0
+    if !Odoc_global.errors > 0 then
+    (
+    prerr_endline (Odoc_messages.errors_occured !Odoc_global.errors) ;
+    exit 1
+    )
+    else
+      exit 0
+  in
+  Handler_common.handle run
