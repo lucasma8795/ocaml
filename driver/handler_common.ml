@@ -33,17 +33,17 @@ let auto_include find_in_dir fn =
 
 let prepend_add dir =
   List.iter (fun base ->
-      Result.iter (fun filename ->
-          let fn = Filename.concat (Dir.path dir) base in
-          if Dir.hidden dir then begin
-            STbl.replace !hidden_files base fn;
-            STbl.replace !hidden_files_uncap filename fn
-          end else begin
-            STbl.replace !visible_files base fn;
-            STbl.replace !visible_files_uncap filename fn
-          end)
-        (Misc.normalized_unit_filename base)
-    ) (Dir.files dir)
+    Result.iter (fun filename ->
+      let fn = Filename.concat (Dir.path dir) base in
+      if Dir.hidden dir then begin
+        STbl.replace !hidden_files base fn;
+        STbl.replace !hidden_files_uncap filename fn
+      end else begin
+        STbl.replace !visible_files base fn;
+        STbl.replace !visible_files_uncap filename fn
+      end)
+    (Misc.normalized_unit_filename base)
+  ) (Dir.files dir)
 
 let handle f =
   Effect.Deep.match_with f ()
@@ -53,7 +53,7 @@ let handle f =
     effc = fun (type c) (eff: c Effect.t) ->
       match eff with
       (* find : string -> string *)
-      | Load_path.Load_path fn ->
+      | Load_path.Find_path fn ->
         Some (fun (k: (c, _) continuation) ->
           let ret =
             try
@@ -67,7 +67,7 @@ let handle f =
           Effect.Deep.continue k ret
         )
 
-      | Load_path.Load_path_normalized fn ->
+      | Load_path.Find_normalized_with_visibility fn ->
         Some (fun (k: (c, _) continuation) ->
           match Misc.normalized_unit_filename fn with
           | Error _ -> raise Not_found

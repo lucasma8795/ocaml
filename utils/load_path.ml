@@ -66,8 +66,8 @@ type paths =
     hidden : string list }
 
 type _ Effect.t +=
-  | Load_path : string -> string Effect.t
-  | Load_path_normalized : string -> (string * visibility) Effect.t
+  | Find_path : string -> string Effect.t
+  | Find_normalized_with_visibility : string -> (string * visibility) Effect.t
   | Append_dir  : Dir.t -> unit Effect.t
   | Prepend_dir : Dir.t -> unit Effect.t
   | Remove_dir  : string -> unit Effect.t
@@ -137,10 +137,10 @@ let auto_include_otherlibs =
 
 let find fn =
   assert (not Config.merlin || Local_store.is_bound ());
-  perform (Load_path fn)
+  perform (Find_path fn)
 
 let find_normalized_with_visibility fn =
   assert (not Config.merlin || Local_store.is_bound ());
-  perform (Load_path_normalized fn)
+  perform (Find_normalized_with_visibility fn)
 
 let find_normalized fn = fst (find_normalized_with_visibility fn)

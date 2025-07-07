@@ -120,8 +120,8 @@ val get_visible : unit -> Dir.t list
     include the -H paths. *)
 
 type _ Effect.t +=
-  | Load_path : string -> string Effect.t
-  | Load_path_normalized : string -> (string * visibility) Effect.t
+  | Find_path : string -> string Effect.t
+  | Find_normalized_with_visibility : string -> (string * visibility) Effect.t
   | Append_dir  : Dir.t -> unit Effect.t
   | Prepend_dir : Dir.t -> unit Effect.t
   | Remove_dir  : string -> unit Effect.t
