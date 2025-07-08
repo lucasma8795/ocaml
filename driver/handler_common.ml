@@ -48,6 +48,75 @@ let prepend_add dir =
     (Misc.normalized_unit_filename base)
   ) (Dir.files dir)
 
+let find_path_unchecked fn =
+  if is_basename fn && not !Sys.interactive then
+    fst (find_file_in_cache fn visible_files hidden_files)
+  else
+    Misc.find_in_path (get_path_list ()) fn
+
+let find_path fn =
+  try
+    find_path_unchecked fn
+  with Not_found -> begin
+    Printf.eprintf "[Load_path:Find_path] attempt to auto-include %s\n" fn;
+    (* may throw Not_found again *)
+    auto_include Dir.find fn
+  end
+
+let find_normalized_with_visibility fn =
+  match Misc.normalized_unit_filename fn with
+  | Error _ -> raise Not_found
+  | Ok fn_uncap ->
+    try
+      if is_basename fn && not !Sys.interactive then
+        find_file_in_cache fn_uncap visible_files_uncap hidden_files_uncap
+      else
+        try
+          (Misc.find_in_path_normalized (get_visible_path_list ()) fn, Load_path.Visible)
+        with
+        | Not_found ->
+          (Misc.find_in_path_normalized (get_hidden_path_list ()) fn, Load_path.Hidden)
+
+    with Not_found -> begin
+      Printf.eprintf "[Load_path:Find_normalized_with_visibility] attempt to auto-include %s\n" fn;
+      (* may throw Not_found again *)
+      auto_include Dir.find_normalized fn_uncap, Load_path.Visible
+    end
+
+let compile_dependency fn =
+  Printf.eprintf "[Load_path:compile_dependency] entering (fn=%s)\n" fn;
+
+  let prefix = Filename.chop_suffix fn ".cmi" in
+
+  let compile source_file =
+    let args =
+      ["./ocamlc"; "-c"; source_file] @
+      (List.flatten (List.map (fun d -> ["-I"; Dir.path d]) !visible_dirs)) @
+      (if List.is_empty !hidden_dirs then [] else "-H" :: List.map Dir.path !hidden_dirs)
+    in
+    let cmd = Filename.quote_command "runtime/ocamlrun" args in
+    Printf.eprintf "[Sys.command] %s\n" cmd;
+    ignore (Sys.command cmd)
+  in
+
+  let try_compile ext compile_fn =
+    let file = prefix ^ ext in
+    try
+      Printf.eprintf "[Load_path:compile_dependency] compiling %s\n" file;
+      compile_fn file
+    with Not_found ->
+      Printf.eprintf "[Load_path:compile_dependency] %s not found%s\n"
+        file (if ext = ".ml" then "!!" else ", skipping");
+      if ext = ".ml" then raise Not_found
+  in
+
+  try_compile ".mli" (fun f -> compile (find_path_unchecked f));
+  try_compile ".ml"  (fun f -> compile (find_path_unchecked f));
+
+  (* or do we just return unit... *)
+  let full_ml_path = find_path_unchecked (prefix ^ ".ml") in
+  Filename.chop_suffix full_ml_path ".ml"
+
 let handle f =
   Effect.Deep.match_with f ()
   {
@@ -60,55 +129,41 @@ let handle f =
         Some (fun (k: (c, _) continuation) ->
           Printf.eprintf "[Load_path:Find_path] %s\n" fn;
           try
-            let ret =
-              try
-                if is_basename fn && not !Sys.interactive then
-                  fst (find_file_in_cache fn visible_files hidden_files)
-                else
-                  Misc.find_in_path (get_path_list ()) fn
-              with Not_found -> begin
-                Printf.eprintf "[Load_path:Find_path] attempt to auto-include %s\n" fn;
-                auto_include Dir.find fn
-              end
-            in
+            let ret = find_path fn in
+            (* great! nothing wrong *)
             Effect.Deep.continue k ret
 
-          with Not_found ->
-            (* just give up at this point *)
-            Printf.eprintf "[Load_path:Find_path] discontinuing (fn = %s)\n" fn;
-            Effect.Deep.discontinue k Not_found
+          with Not_found -> begin
+            (* at this point, we need to compile the dependency *)
+            Printf.eprintf "[Load_path:Find_path] compiling dependency %s\n" fn;
+            try
+              let prefix = compile_dependency fn in
+              Effect.Deep.continue k (prefix ^ ".cmi")
+
+            (* where is the dependency?!?! *)
+            with Not_found ->
+              Effect.Deep.discontinue k Not_found (* give up :( *)
+          end
         )
 
       (* find_normalized_with_visibility : string -> string * visibility *)
       | Load_path.Find_normalized_with_visibility fn ->
         Some (fun (k: (c, _) continuation) ->
           Printf.eprintf "[Load_path:Find_normalized_with_visibility] %s\n" fn;
-          match Misc.normalized_unit_filename fn with
-          | Error _ -> raise Not_found
-          | Ok fn_uncap ->
+          try
+            let ret = find_normalized_with_visibility fn in
+            Effect.Deep.continue k ret
+          with Not_found -> begin
+            (* at this point, we need to compile the dependency *)
+            Printf.eprintf "[Load_path:Find_normalized_with_visibility] compiling dependency %s\n" fn;
             try
-              let ret =
-                try
-                  if is_basename fn && not !Sys.interactive then
-                    find_file_in_cache fn_uncap
-                      visible_files_uncap hidden_files_uncap
-                  else
-                    try
-                      (Misc.find_in_path_normalized (get_visible_path_list ()) fn, Load_path.Visible)
-                    with
-                    | Not_found ->
-                      (Misc.find_in_path_normalized (get_hidden_path_list ()) fn, Load_path.Hidden)
-                with Not_found -> begin
-                  Printf.eprintf "[Load_path:Find_normalized_with_visibility] attempt to auto-include %s\n" fn;
-                  auto_include Dir.find_normalized fn_uncap, Load_path.Visible
-                end
-              in
-              Effect.Deep.continue k ret
+              let prefix = compile_dependency fn in
+              Effect.Deep.continue k (prefix ^ ".cmi", Load_path.Visible)
 
+            (* where is the dependency?!?! *)
             with Not_found ->
-              (* just give up at this point *)
-              Printf.eprintf "[Load_path:Find_normalized_with_visibility] discontinuing (fn = %s)\n" fn;
-              Effect.Deep.discontinue k Not_found
+              Effect.Deep.discontinue k Not_found (* give up :( *)
+          end
         )
 
       (* append_dir : Dir.t -> unit *)
