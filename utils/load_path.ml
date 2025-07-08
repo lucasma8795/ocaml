@@ -114,6 +114,7 @@ let prepend_dir (dir : Dir.t) =
   perform (Prepend_dir dir)
 
 let auto_include_libs libs alert find_in_dir fn =
+  Printf.eprintf "[Load_path:auto_include] (entering with fn = %s)\n" fn;
   let scan (lib, lazy dir) =
     let file = find_in_dir dir fn in
     let alert_and_add_dir _ =
@@ -125,7 +126,10 @@ let auto_include_libs libs alert find_in_dir fn =
   in
   match List.find_map scan libs with
   | Some base -> base
-  | None -> raise Not_found
+  | None -> begin
+    Printf.eprintf "[Load_path:auto_include] failed, aborting (fn = %s)\n" fn;
+    raise Not_found;
+  end
 
 let auto_include_otherlibs =
   (* Ensure directories are only ever scanned once *)
