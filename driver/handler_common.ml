@@ -84,9 +84,22 @@ let find_normalized_with_visibility fn =
     end
 
 let compile_dependency fn =
+  let fn = match Misc.normalized_unit_filename fn with
+    | Error _ -> raise Not_found
+    | Ok fn_uncap -> fn_uncap
+  in
+
   Printf.eprintf "[Load_path:compile_dependency] entering (fn=%s)\n" fn;
 
-  let prefix = Filename.chop_suffix fn ".cmi" in
+  let maybe_prefix = Filename.chop_suffix_opt ~suffix:".cmi" fn in
+  let prefix =
+    match maybe_prefix with
+    | Some p -> p
+    | None -> begin
+        Printf.eprintf "[Load_path:compile_dependency] %s is not a .cmi file??\n" fn;
+        raise Not_found
+      end
+  in
 
   let compile source_file =
     let args =
