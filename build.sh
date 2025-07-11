@@ -8,28 +8,15 @@ git clean -dfX
 ./configure
 make -j coldstart
 
-# create utils/config.ml
-cat utils/config.generated.ml utils/config.common.ml > utils/config_main.ml
-cp utils/config_main.ml utils/config.ml
+# Manually create various .ml files that would otherwise be done by Makefile dependencies
+make V=1 utils/config.ml
+make V=1 utils/domainstate.mli utils/domainstate.ml
+make V=1 parsing/parser.mli parsing/parser.ml
+make V=1 parsing/lexer.ml
+make V=1 parsing/camlinternalMenhirLib.mli parsing/camlinternalMenhirLib.ml
+make V=1 bytecomp/opcodes.ml bytecomp/opcodes.mli
+make V=1 lambda/runtimedef.ml
 
-# create utils/domainstate.ml{,i}
-gcc -E -P -I runtime/caml utils/domainstate.ml.c > utils/domainstate.ml
-gcc -E -P -I runtime/caml utils/domainstate.mli.c > utils/domainstate.mli
-
-# create parsing/parser.ml{,i}
-sed "s/MenhirLib/CamlinternalMenhirLib/g" boot/menhir/parser.mli > parsing/parser.mli
-sed "s/MenhirLib/CamlinternalMenhirLib/g" boot/menhir/parser.ml > parsing/parser.ml
-
-# create parsing/camlinternalMenhirLib.ml{,i}
-echo '[@@@ocaml.warning "-67"]' > parsing/camlinternalMenhirLib.mli && \
-cat boot/menhir/menhirLib.mli >> parsing/camlinternalMenhirLib.mli
-cp boot/menhir/menhirLib.ml parsing/camlinternalMenhirLib.ml
-
-# ./boot/ocamlrun ./boot/ocamlc -nostdlib -I ./boot -use-prims runtime/primitives -g -strict-sequence -principal -absname -w +a-4-9-40-41-42-44-45-48 -warn-error +a -bin-annot -strict-formats -I utils -I utils -I parsing -I typing -I bytecomp -I file_formats -I lambda -I middle_end -I middle_end/closure -I middle_end/flambda -I middle_end/flambda/base_types -I asmcomp -I driver -I toplevel -I tools -I runtime -I otherlibs/dynlink -I otherlibs/str -I otherlibs/systhreads -I otherlibs/unix -I otherlibs/runtime_events -c utils/domainstate.mli
-
-# ./boot/ocamlrun ./boot/ocamlc -nostdlib -I ./boot -use-prims runtime/primitives -g -strict-sequence -principal -absname -w +a-4-9-40-41-42-44-45-48 -warn-error +a -bin-annot -strict-formats -I utils -I utils -I parsing -I typing -I bytecomp -I file_formats -I lambda -I middle_end -I middle_end/closure -I middle_end/flambda -I middle_end/flambda/base_types -I asmcomp -I driver -I toplevel -I tools -I runtime -I otherlibs/dynlink -I otherlibs/str -I otherlibs/systhreads -I otherlibs/unix -I otherlibs/runtime_events -c utils/domainstate.ml
-
-# domainstate
 # make V=1 compilerlibs/ocamlcommon.cma
 ./boot/ocamlrun ./boot/ocamlc -nostdlib -linkall -a -use-prims runtime/primitives \
   -I ./boot -I utils -I parsing -I typing -I bytecomp -I file_formats -I lambda -I middle_end -I middle_end/closure -I middle_end/flambda -I middle_end/flambda/base_types -I asmcomp -I driver -I toplevel -I tools -I runtime -I otherlibs/dynlink -I otherlibs/str -I otherlibs/systhreads -I otherlibs/unix -I otherlibs/runtime_events -I stdlib \
@@ -42,8 +29,11 @@ cp boot/menhir/menhirLib.ml parsing/camlinternalMenhirLib.ml
   bytecomp/instruct.ml bytecomp/bytegen.ml bytecomp/printinstr.ml bytecomp/emitcode.ml bytecomp/bytelink.ml bytecomp/bytelibrarian.ml bytecomp/bytepackager.ml driver/errors.ml driver/compile.ml driver/maindriver.ml \
   -o compilerlibs/ocamlbytecomp.cma
 
+# make driver/{,opt}main.cmo
+./boot/ocamlrun ./boot/ocamlc -c driver/main.ml driver/optmain.ml -I stdlib -I driver
+
 # make V=1 ocamlc
 ./boot/ocamlrun ./boot/ocamlc -nostdlib -use-prims runtime/primitives -compat-32 -g \
   -I ./boot -I utils -I parsing -I typing -I bytecomp -I file_formats -I lambda -I middle_end -I middle_end/closure -I middle_end/flambda -I middle_end/flambda/base_types -I asmcomp -I driver -I toplevel -I tools -I runtime -I otherlibs/dynlink -I otherlibs/str -I otherlibs/systhreads -I otherlibs/unix -I otherlibs/runtime_events \
-  compilerlibs/ocamlbytecomp.cma driver/main.cmo \
-  -o ocamlc compilerlibs/ocamlcommon.cma
+  compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma driver/main.cmo \
+  -o ocamlc
