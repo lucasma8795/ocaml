@@ -48,7 +48,7 @@ let prepend_add dir =
     (Misc.normalized_unit_filename base)
   ) (Dir.files dir)
 
-let find_path_unchecked fn =
+let find_path_no_auto_include fn =
   if is_basename fn && not !Sys.interactive then
     fst (find_file_in_cache fn visible_files hidden_files)
   else
@@ -56,7 +56,7 @@ let find_path_unchecked fn =
 
 let find_path fn =
   try
-    find_path_unchecked fn
+    find_path_no_auto_include fn
   with Not_found -> begin
     Printf.eprintf "[Load_path:Find_path] attempt to auto-include %s\n" fn;
     (* may throw Not_found again *)
@@ -83,7 +83,8 @@ let find_normalized_with_visibility fn =
       auto_include Dir.find_normalized fn_uncap, Load_path.Visible
     end
 
-let compile_dependency fn =
+let rec compile_dependency : string -> string = fun fn ->
+  (* do we need this... *)
   let fn = match Misc.normalized_unit_filename fn with
     | Error _ -> raise Not_found
     | Ok fn_uncap -> fn_uncap
@@ -91,44 +92,73 @@ let compile_dependency fn =
 
   Printf.eprintf "[Load_path:compile_dependency] entering (fn=%s)\n" fn;
 
-  let maybe_prefix = Filename.chop_suffix_opt ~suffix:".cmi" fn in
-  let prefix =
-    match maybe_prefix with
-    | Some p -> p
-    | None -> begin
-        Printf.eprintf "[Load_path:compile_dependency] %s is not a .cmi file??\n" fn;
-        raise Not_found
-      end
+  (* verify that fn is either a *.cmi or a *.cmo *)
+  let ext : string =
+    if String.ends_with ~suffix:".cmi" fn then
+      ".cmi"
+    else if String.ends_with ~suffix:".cmo" fn then
+      ".cmo"
+    else begin
+      Printf.eprintf "[Load_path:compile_dependency] %s is not a .cmi or a .cmo file??\n" fn;
+      raise Not_found
+    end
+
   in
 
-  let compile source_file =
+  let prefix : string = Filename.chop_suffix fn ext in
+
+  (* if fn is a .cmi, we want to find a .mli, otherwise a .ml *)
+  let source_ext : string = if ext = ".cmi" then ".mli" else ".ml" in
+
+  (* attempt to resolve full path of file, this may throw Not_Found *)
+  let full_source_file : string = find_path_no_auto_include (prefix ^ source_ext) in
+  Printf.eprintf "[Load_path:compile_dependency] path resolved to %s\n" full_source_file;
+
+  let compile : unit -> unit = fun () ->
+    (* todo: dynamic args *)
     let args =
-      ["./ocamlc"; "-c"; source_file] @
+      ["./boot/ocamlc"; "-c"; full_source_file; "-nostdlib"; "-I"; "./boot";
+       "-use-prims"; "runtime/primitives"; "-g"; "-strict-sequence";
+       "-principal"; "-absname"; "-w"; "+a-4-9-40-41-42-44-45-48";
+       "-warn-error"; "+a"; "-bin-annot"; "-strict-formats"] @
       (List.flatten (List.map (fun d -> ["-I"; Dir.path d]) !visible_dirs)) @
-      (if List.is_empty !hidden_dirs then [] else "-H" :: List.map Dir.path !hidden_dirs)
+      (List.flatten (List.map (fun d -> ["-I"; Dir.path d]) !hidden_dirs))
     in
-    let cmd = Filename.quote_command "runtime/ocamlrun" args in
+    let cmd = Filename.quote_command "./boot/ocamlrun" args in
     Printf.eprintf "[Sys.command] %s\n" cmd;
-    ignore (Sys.command cmd)
+    let exit_code = Sys.command cmd in
+    Printf.eprintf "[Load_path:compile_dependency] exit code: %d\n" exit_code;
+
+    (* todo: throw exception instead? *)
+    assert (exit_code = 0)
   in
 
-  let try_compile ext compile_fn =
-    let file = prefix ^ ext in
+  (* if we are compiling a .ml, compile the .mli if it exists (it is ok if not)
+     (otherwise we get inconsistent .cmi's from the auto-generated one
+     via compilation of a .ml, and compilation of the .mli) *)
+  if source_ext = ".ml" then begin
     try
-      Printf.eprintf "[Load_path:compile_dependency] compiling %s\n" file;
-      compile_fn file
-    with Not_found ->
-      Printf.eprintf "[Load_path:compile_dependency] %s not found%s\n"
-        file (if ext = ".ml" then "!!" else ", skipping");
-      if ext = ".ml" then raise Not_found
-  in
+      let mli_file = find_path_no_auto_include (prefix ^ ".mli") in
+      Printf.eprintf "[Load_path:compile_dependency] attempting to compile %s (ok if it doesn't exist)\n" mli_file;
+      ignore (compile_dependency mli_file)
 
-  try_compile ".mli" (fun f -> compile (find_path_unchecked f));
-  try_compile ".ml"  (fun f -> compile (find_path_unchecked f));
+    with Not_found ->
+      Printf.eprintf "[Load_path:compile_dependency] no .mli file for %s, continuing...\n" full_source_file
+  end;
+
+  (* compile the source file *)
+  let () = try
+    compile ();
+    Printf.eprintf "[Load_path:compile_dependency] compiled successfully!\n"
+  with Not_found -> begin
+    Printf.eprintf "[Load_path:compile_dependency] failed to compile %s, quitting \n" full_source_file;
+    raise Not_found
+  end
+
+  in
 
   (* or do we just return unit... *)
-  let full_ml_path = find_path_unchecked (prefix ^ ".ml") in
-  Filename.chop_suffix full_ml_path ".ml"
+  Filename.chop_suffix full_source_file source_ext
 
 let handle f =
   Effect.Deep.match_with f ()
@@ -164,8 +194,7 @@ let handle f =
         Some (fun (k: (c, _) continuation) ->
           Printf.eprintf "[Load_path:Find_normalized_with_visibility] %s\n" fn;
           try
-            let ret = find_normalized_with_visibility fn in
-            Effect.Deep.continue k ret
+            Effect.Deep.continue k (find_normalized_with_visibility fn)
           with Not_found -> begin
             (* at this point, we need to compile the dependency *)
             Printf.eprintf "[Load_path:Find_normalized_with_visibility] compiling dependency %s\n" fn;
