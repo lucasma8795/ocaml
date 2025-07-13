@@ -29,7 +29,7 @@ make V=1 lambda/runtimedef.ml
   bytecomp/instruct.ml bytecomp/bytegen.ml bytecomp/printinstr.ml bytecomp/emitcode.ml bytecomp/bytelink.ml bytecomp/bytelibrarian.ml bytecomp/bytepackager.ml driver/errors.ml driver/compile.ml driver/maindriver.ml \
   -o compilerlibs/ocamlbytecomp.cma
 
-# make driver/{,opt}main.cmo
+# make V=1 driver/main.cmo driver/optmain.cmo
 ./boot/ocamlrun ./boot/ocamlc -c driver/main.ml driver/optmain.ml -I stdlib -I driver
 
 # make V=1 ocamlc

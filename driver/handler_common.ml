@@ -10,10 +10,8 @@ let visible_files_uncap : registry ref = Local_store.s_table STbl.create 42
 let hidden_files : registry ref = Local_store.s_table STbl.create 42
 let hidden_files_uncap : registry ref = Local_store.s_table STbl.create 42
 
-(* changed signature from Dir.t list ref,
-   since contents of include directories can now change *)
-let visible_dirs : Dir.t ref list ref = Local_store.s_ref []
-let hidden_dirs  : Dir.t ref list ref = Local_store.s_ref []
+let visible_dirs : Dir.t list ref = Local_store.s_ref []
+let hidden_dirs  : Dir.t list ref = Local_store.s_ref []
 
 let find_file_in_cache (fn : string) =
   try (STbl.find !visible_files fn, Load_path.Visible) with
@@ -25,12 +23,12 @@ let find_file_in_cache_uncap (fn_uncap : string) =
 
 let is_basename fn = Filename.basename fn = fn
 
-let get_visible_path_list () = List.rev_map (fun d -> Dir.path !d) !visible_dirs
-let get_hidden_path_list () = List.rev_map (fun d -> Dir.path !d) !hidden_dirs
+let get_visible_path_list () = List.rev_map Dir.path !visible_dirs
+let get_hidden_path_list () = List.rev_map Dir.path !hidden_dirs
 
 let get_path_list () =
-  let acc = List.rev_map (fun d -> Dir.path !d) !hidden_dirs in
-  Misc.rev_map_end (fun d -> Dir.path !d) !visible_dirs acc
+  let acc = List.rev_map Dir.path !hidden_dirs in
+  Misc.rev_map_end Dir.path !visible_dirs acc
 
 let auto_include find_in_dir fn =
   if !Clflags.no_std_include then begin
@@ -42,11 +40,11 @@ let auto_include find_in_dir fn =
     Load_path.auto_include_otherlibs alert find_in_dir fn
   end
 
-let prepend_add (dir: Dir.t ref) =
+let prepend_add (dir: Dir.t) =
   List.iter (fun base ->
     Result.iter (fun filename ->
-      let fn = Filename.concat (Dir.path !dir) base in
-      if Dir.hidden !dir then begin
+      let fn = Filename.concat (Dir.path dir) base in
+      if Dir.hidden dir then begin
         STbl.replace !hidden_files base fn;
         STbl.replace !hidden_files_uncap filename fn
       end else begin
@@ -54,7 +52,7 @@ let prepend_add (dir: Dir.t ref) =
         STbl.replace !visible_files_uncap filename fn
       end)
     (Misc.normalized_unit_filename base)
-  ) (Dir.files !dir)
+  ) (Dir.files dir)
 
 let find_path fn =
   try
@@ -93,7 +91,7 @@ let find_normalized_with_visibility fn =
 
 let add_new_file_to_path : string -> string -> unit = fun dirname base ->
   Printf.eprintf "[Load_path:add_new_file_to_path] adding dirname=%s base=%s to global state\n" dirname base;
-  let dir : Dir.t ref = List.find (fun d -> Dir.path !d = dirname) !visible_dirs in
+  let dir = List.find (fun d -> Dir.path d = dirname) !visible_dirs in
 
   let base_uncap = Misc.normalized_unit_filename base in
   let base_uncap = match base_uncap with
@@ -105,7 +103,7 @@ let add_new_file_to_path : string -> string -> unit = fun dirname base ->
   let full_fn_uncap = Filename.concat dirname base_uncap in
 
   (* update the global state *)
-  if Dir.hidden !dir then begin
+  if Dir.hidden dir then begin
     STbl.replace !hidden_files_uncap base_uncap full_fn_uncap;
     STbl.replace !hidden_files base full_fn
   end else begin
@@ -113,26 +111,25 @@ let add_new_file_to_path : string -> string -> unit = fun dirname base ->
     STbl.replace !visible_files base full_fn
   end;
 
-  (* let new_files = base :: Dir.files !dir in *)
-  (* dir := Dir.create_from_files ~hidden:(Dir.hidden !dir) (Dir.path !dir) new_files; *)
-  dir := Dir.create ~hidden:(Dir.hidden !dir) (Dir.path !dir); (* slow *)
+  Dir.add_file dir base;
+  (* dir = Dir.create_from_files ~hidden:(Dir.hidden dir) (Dir.path dir) new_files; *)
+  (* dir := Dir.create ~hidden:(Dir.hidden !dir) (Dir.path !dir); *)
 
   (* print out new_files *)
   Printf.eprintf "[Load_path:add_new_file_to_path] new files in %s: %s\n"
-    (Dir.path !dir) (String.concat ", " (Dir.files !dir));
+    (Dir.path dir) (String.concat ", " (Dir.files dir));
 
   (* sanity checks *)
   assert (find_path base = full_fn);
-  assert (fst (find_file_in_cache base) = full_fn);
-  assert (find_normalized_with_visibility base = (Filename.concat dirname base, if Dir.hidden !dir then Load_path.Hidden else Load_path.Visible));
-  assert (fst (find_file_in_cache_uncap base_uncap) = full_fn)
+  let hidden = if Dir.hidden dir then Load_path.Hidden else Load_path.Visible in
+  assert (find_normalized_with_visibility base = (Filename.concat dirname base, hidden))
 
 
 (* takes in a *.cm{i,o} file, finds it in the load path and compiles it *)
 let rec compile_dependency : string -> string = fun base ->
   Printf.eprintf "[Load_path:compile_dependency] entering (base=%s)\n" base;
 
-  (* this simply uncapitalizes the file name *)
+  (* this will most definitely break for capitalized file names *)
   let base = match Misc.normalized_unit_filename base with
     | Error _ -> raise Not_found
     | Ok ubase -> ubase
@@ -141,7 +138,7 @@ let rec compile_dependency : string -> string = fun base ->
   assert (is_basename base);
 
   (* verify that fn is either a .cmi or a .cmo *)
-  let ext : string =
+  let ext =
     if String.ends_with ~suffix:".cmi" base then
       ".cmi"
     else if String.ends_with ~suffix:".cmo" base then
@@ -153,20 +150,21 @@ let rec compile_dependency : string -> string = fun base ->
   in
 
   (* this should now be the file prefix, i.e. Foo for path/Foo.ml *)
-  let prefix : string = Filename.chop_suffix base ext in
+  let prefix = Filename.chop_suffix base ext in
 
   (* if fn is a .cmi, we want to find a .mli, otherwise a .ml *)
-  let source_ext : string = if ext = ".cmi" then ".mli" else ".ml" in
+  let source_ext = if ext = ".cmi" then ".mli" else ".ml" in
 
   (* attempt to resolve full path of file, this may throw Not_Found *)
-  let full_source_file : string = find_path (prefix ^ source_ext) in
-  let dirname : string = Filename.dirname full_source_file in
+  let full_source_file = find_path (prefix ^ source_ext) in
+  let dirname = Filename.dirname full_source_file in
   Printf.eprintf "[Load_path:compile_dependency] path resolved to %s\n" full_source_file;
   Printf.eprintf "[Load_path:compile_dependency] dirname resolved to %s\n" dirname;
 
   (* if the .cm{i,o} file is already here, skip
      todo: read info off of cache instead *)
-  if Sys.file_exists (Filename.concat dirname base) then begin
+  let full_compiled_file = Filename.concat dirname base in
+  if Sys.file_exists full_compiled_file then begin
     Printf.eprintf "[Load_path:compile_dependency] %s is already here, skipping\n" base;
     Filename.chop_suffix full_source_file source_ext
   end
@@ -175,13 +173,19 @@ let rec compile_dependency : string -> string = fun base ->
 
   let compile : unit -> unit = fun () ->
     (* todo: dynamic args instead of inheriting load path? *)
+
+    (* construct -I and -H args *)
+    let load_path_args =
+      List.flatten (List.map (fun d -> ["-I"; Dir.path d]) !visible_dirs) @
+      List.flatten (List.map (fun d -> ["-H"; Dir.path d]) !hidden_dirs)
+    in
+
     let args =
       ["./boot/ocamlc"; "-c"; full_source_file; "-nostdlib"; "-I"; "./boot";
        "-use-prims"; "runtime/primitives"; "-g"; "-strict-sequence";
        "-principal"; "-absname"; "-w"; "+a-4-9-40-41-42-44-45-48";
        "-warn-error"; "+a"; "-bin-annot"; "-strict-formats"] @
-      (List.flatten (List.map (fun d -> ["-I"; Dir.path !d]) !visible_dirs)) @
-      (List.flatten (List.map (fun d -> ["-I"; Dir.path !d]) !hidden_dirs))
+      load_path_args
     in
 
     let cmd = Filename.quote_command "./boot/ocamlrun" args in
@@ -236,7 +240,7 @@ let handle f =
       (* find : string -> string *)
       | Load_path.Find_path fn ->
         Some (fun (k: (c, _) continuation) ->
-          Printf.eprintf "[Load_path:Find_path] %s\n" fn;
+          (* Printf.eprintf "[Load_path:Find_path] %s\n" fn; *)
           try
             let ret = find_path fn in
             (* great! nothing wrong *)
@@ -258,7 +262,7 @@ let handle f =
       (* find_normalized_with_visibility : string -> string * visibility *)
       | Load_path.Find_normalized_with_visibility fn ->
         Some (fun (k: (c, _) continuation) ->
-          Printf.eprintf "[Load_path:Find_normalized_with_visibility] %s\n" fn;
+          (* Printf.eprintf "[Load_path:Find_normalized_with_visibility] %s\n" fn; *)
           try
             Effect.Deep.continue k (find_normalized_with_visibility fn)
           with Not_found -> begin
@@ -294,28 +298,28 @@ let handle f =
             )
             (Dir.files dir);
           if Dir.hidden dir then
-            hidden_dirs := ref dir :: !hidden_dirs
+            hidden_dirs := dir :: !hidden_dirs
           else
-            visible_dirs := ref dir :: !visible_dirs;
+            visible_dirs := dir :: !visible_dirs;
           Effect.Deep.continue k ()
         )
 
       (* prepend_dir : Dir.t -> unit *)
       | Load_path.Prepend_dir dir ->
         Some (fun (k: (c, _) continuation) ->
-          prepend_add (ref dir);
+          prepend_add dir;
           if Dir.hidden dir then
-            hidden_dirs := !hidden_dirs @ [ref dir]
+            hidden_dirs := !hidden_dirs @ [dir]
           else
-            visible_dirs := !visible_dirs @ [ref dir];
+            visible_dirs := !visible_dirs @ [dir];
           Effect.Deep.continue k ()
         )
 
       (* remove_dir : Dir.t -> unit *)
       | Load_path.Remove_dir dir ->
         Some (fun (k: (c, _) continuation) ->
-          let visible = List.filter (fun d -> Dir.path !d <> dir) !visible_dirs in
-          let hidden  = List.filter (fun d -> Dir.path !d <> dir) !hidden_dirs in
+          let visible = List.filter (fun d -> Dir.path d <> dir) !visible_dirs in
+          let hidden  = List.filter (fun d -> Dir.path d <> dir) !hidden_dirs in
           if   List.compare_lengths visible !visible_dirs <> 0
             || List.compare_lengths hidden !hidden_dirs <> 0 then begin
             Local_store.reset ();
@@ -343,15 +347,15 @@ let handle f =
          assumes Reset_path has previously been performed *)
       | Load_path.Init_path (visible, hidden) ->
         Some (fun (k: (c, _) continuation) ->
-          visible_dirs := List.rev_map (fun path -> ref (Dir.create ~hidden:false path)) visible;
-          hidden_dirs := List.rev_map (fun path -> ref (Dir.create ~hidden:true path)) hidden;
+          visible_dirs := List.rev_map (fun path -> Dir.create ~hidden:false path) visible;
+          hidden_dirs := List.rev_map (fun path -> Dir.create ~hidden:true path) hidden;
           List.iter prepend_add !hidden_dirs;
           List.iter prepend_add !visible_dirs;
 
-          Printf.eprintf "[Load_path:Init_path] visible_dirs: %s\n"
-            (String.concat ", " (List.map (fun d -> Dir.path !d) !visible_dirs));
+          (* Printf.eprintf "[Load_path:Init_path] visible_dirs: %s\n"
+            (String.concat ", " (List.map (fun d -> Dir.path d) !visible_dirs));
           Printf.eprintf "[Load_path:Init_path] hidden_dirs: %s\n"
-            (String.concat ", " (List.map (fun d -> Dir.path !d) !hidden_dirs));
+            (String.concat ", " (List.map (fun d -> Dir.path d) !hidden_dirs)); *)
 
           Effect.Deep.continue k ();
         )
@@ -359,7 +363,7 @@ let handle f =
       (* get_visible : unit -> Dir.t list *)
       | Load_path.Get_visible ->
         Some (fun (k: (c, _) continuation) ->
-          Effect.Deep.continue k (List.rev_map (!) !visible_dirs)
+          Effect.Deep.continue k (List.rev !visible_dirs)
         )
 
       (* get_path_list : unit -> string list *)
@@ -372,8 +376,8 @@ let handle f =
       | Load_path.Get_paths ->
         Some (fun (k: (c, _) continuation) ->
           let ret = Load_path.{
-            visible = List.rev_map (fun d -> Dir.path !d) !visible_dirs;
-            hidden = List.rev_map (fun d -> Dir.path !d) !hidden_dirs
+            visible = List.rev_map (fun d -> Dir.path d) !visible_dirs;
+            hidden = List.rev_map (fun d -> Dir.path d) !hidden_dirs
           }
           in
           Effect.Deep.continue k ret

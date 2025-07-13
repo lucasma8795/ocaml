@@ -17,16 +17,16 @@ open Effect
 module Dir = struct
   type t = {
     path : string;
-    files : string list;
+    files : string list ref;
     hidden : bool;
   }
 
   let path t = t.path
-  let files t = t.files
+  let files t = !(t.files)
   let hidden t = t.hidden
 
   let find t fn =
-    if List.mem fn t.files then
+    if List.mem fn !(t.files) then
       Some (Filename.concat t.path fn)
     else
       None
@@ -39,7 +39,7 @@ module Dir = struct
       else
         None
     in
-    List.find_map search t.files
+    List.find_map search !(t.files)
 
   (* For backward compatibility reason, simulate the behavior of
      [Misc.find_in_path]: silently ignore directories that don't exist
@@ -51,7 +51,11 @@ module Dir = struct
       [||]
 
   let create ~hidden path =
-    { path; files = Array.to_list (readdir_compat path); hidden }
+    { path; files = ref (Array.to_list (readdir_compat path)); hidden }
+
+  let add_file t fn =
+    if not (List.mem fn !(t.files)) then
+      t.files := fn :: !(t.files)
 end
 
 type auto_include_callback =
