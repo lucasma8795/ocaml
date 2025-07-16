@@ -112,12 +112,6 @@ let add_new_file_to_path : string -> string -> unit = fun dirname base ->
   end;
 
   Dir.add_file dir base;
-  (* dir = Dir.create_from_files ~hidden:(Dir.hidden dir) (Dir.path dir) new_files; *)
-  (* dir := Dir.create ~hidden:(Dir.hidden !dir) (Dir.path !dir); *)
-
-  (* print out new_files *)
-  Printf.eprintf "[Load_path:add_new_file_to_path] new files in %s: %s\n"
-    (Dir.path dir) (String.concat ", " (Dir.files dir));
 
   (* sanity checks *)
   assert (find_path base = full_fn);
@@ -126,16 +120,15 @@ let add_new_file_to_path : string -> string -> unit = fun dirname base ->
 
 
 (* takes in a *.cm{i,o} file, finds it in the load path and compiles it *)
-let rec compile_dependency : string -> string = fun base ->
-  Printf.eprintf "[Load_path:compile_dependency] entering (base=%s)\n" base;
+let rec compile_dependency : string -> string = fun fn ->
+  Printf.eprintf "[Load_path:compile_dependency] entering (fn=%s)\n" fn;
 
   (* this will most definitely break for capitalized file names *)
+  let base = Filename.basename fn in
   let base = match Misc.normalized_unit_filename base with
     | Error _ -> raise Not_found
     | Ok ubase -> ubase
   in
-
-  assert (is_basename base);
 
   (* verify that fn is either a .cmi or a .cmo *)
   let ext =
@@ -166,7 +159,7 @@ let rec compile_dependency : string -> string = fun base ->
   let full_compiled_file = Filename.concat dirname base in
   if Sys.file_exists full_compiled_file then begin
     Printf.eprintf "[Load_path:compile_dependency] %s is already here, skipping\n" base;
-    Filename.chop_suffix full_source_file source_ext
+    full_compiled_file
   end
 
   else
@@ -181,7 +174,7 @@ let rec compile_dependency : string -> string = fun base ->
     in
 
     let args =
-      ["./boot/ocamlc"; "-c"; full_source_file; "-nostdlib"; "-I"; "./boot";
+      ["./boot/ocamlc"; "-c"; full_source_file; "-nostdlib";
        "-use-prims"; "runtime/primitives"; "-g"; "-strict-sequence";
        "-principal"; "-absname"; "-w"; "+a-4-9-40-41-42-44-45-48";
        "-warn-error"; "+a"; "-bin-annot"; "-strict-formats"] @
@@ -202,9 +195,9 @@ let rec compile_dependency : string -> string = fun base ->
      via compilation of a .ml, and compilation of the .mli) *)
   if source_ext = ".ml" then begin
     try
-      let mli_file = find_path (prefix ^ ".mli") in
-      Printf.eprintf "[Load_path:compile_dependency] attempting to compile %s (ok if it doesn't exist)\n" mli_file;
-      ignore (compile_dependency mli_file)
+      let cmi_file = prefix ^ ".cmi" in
+      Printf.eprintf "[Load_path:compile_dependency] attempting to compile %s (ok if it doesn't exist)\n" cmi_file;
+      ignore (compile_dependency cmi_file)
       (* we probably want exit code to be 0 as well... *)
 
     with Not_found ->
@@ -226,9 +219,7 @@ let rec compile_dependency : string -> string = fun base ->
   add_new_file_to_path dirname base;
   Printf.eprintf "[Load_path:compile_dependency] added %s to global state\n" (find_path base);
 
-  (* return the prefix, i.e. Foo for path/Foo.ml *)
-  (* or do we just return unit... *)
-  Filename.chop_suffix full_source_file source_ext
+  full_compiled_file
 
 let handle f =
   Effect.Deep.match_with f ()
@@ -250,8 +241,8 @@ let handle f =
             (* at this point, we need to compile the dependency *)
             Printf.eprintf "[Load_path:Find_path] compiling dependency %s\n" fn;
             try
-              let prefix = compile_dependency fn in
-              Effect.Deep.continue k (prefix ^ ".cmi")
+              let full_fn = compile_dependency fn in
+              Effect.Deep.continue k full_fn
 
             (* where is the dependency?!?! *)
             with Not_found ->
@@ -269,8 +260,8 @@ let handle f =
             (* at this point, we need to compile the dependency *)
             Printf.eprintf "[Load_path:Find_normalized_with_visibility] compiling dependency %s\n" fn;
             try
-              let prefix = compile_dependency fn in
-              Effect.Deep.continue k (prefix ^ ".cmi", Load_path.Visible)
+              let full_fn = compile_dependency fn in
+              Effect.Deep.continue k (full_fn, Load_path.Visible)
 
             (* where is the dependency?!?! *)
             with Not_found ->
