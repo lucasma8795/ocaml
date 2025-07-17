@@ -123,7 +123,7 @@ let add_new_file_to_path : string -> string -> unit = fun dirname base ->
 let rec compile_dependency : string -> string = fun fn ->
   Printf.eprintf "[Load_path:compile_dependency] entering (fn=%s)\n" fn;
 
-  (* this will most definitely break for capitalized file names *)
+  (* extract basename and uncapitalize it *)
   let base = Filename.basename fn in
   let base = match Misc.normalized_unit_filename base with
     | Error _ -> raise Not_found
@@ -142,21 +142,34 @@ let rec compile_dependency : string -> string = fun fn ->
     end
   in
 
-  (* this should now be the file prefix, i.e. Foo for path/Foo.ml *)
-  let prefix = Filename.chop_suffix base ext in
+  (* this should now be the basename prefix, i.e. Foo for path/Foo.ml *)
+  let name = Filename.chop_suffix base ext in
 
   (* if fn is a .cmi, we want to find a .mli, otherwise a .ml *)
   let source_ext = if ext = ".cmi" then ".mli" else ".ml" in
 
+  (* fn may contain a path prefix, if we detect one, then use that directly *)
+  (* if not found, this throws Not_Found *)
+  let maybe_path = Filename.dirname fn in
+  let full_source_file =
+    if maybe_path = "" || maybe_path = "." then
+      (* no path prefix, so we need to find it in the load path *)
+      find_path (name ^ source_ext)
+    else begin
+      (* we have a path prefix, so use that directly *)
+      Printf.eprintf "[Load_path:compile_dependency] detected path %s, using it\n" maybe_path;
+      Filename.concat maybe_path (name ^ source_ext)
+    end
+  in
+
+  assert (Sys.file_exists full_source_file);
+
   (* attempt to resolve full path of file, this may throw Not_Found *)
-  let full_source_file = find_path (prefix ^ source_ext) in
-  let dirname = Filename.dirname full_source_file in
-  Printf.eprintf "[Load_path:compile_dependency] path resolved to %s\n" full_source_file;
-  Printf.eprintf "[Load_path:compile_dependency] dirname resolved to %s\n" dirname;
+  Printf.eprintf "[Load_path:compile_dependency] source resolved to %s\n" full_source_file;
 
   (* if the .cm{i,o} file is already here, skip
-     todo: read info off of cache instead *)
-  let full_compiled_file = Filename.concat dirname base in
+     todo: can we read info off of cache instead? *)
+  let full_compiled_file = (Filename.chop_suffix full_source_file source_ext) ^ ext in
   if Sys.file_exists full_compiled_file then begin
     Printf.eprintf "[Load_path:compile_dependency] %s is already here, skipping\n" base;
     full_compiled_file
@@ -165,8 +178,6 @@ let rec compile_dependency : string -> string = fun fn ->
   else
 
   let compile : unit -> unit = fun () ->
-    (* todo: dynamic args instead of inheriting load path? *)
-
     (* construct -I and -H args *)
     let load_path_args =
       List.flatten (List.map (fun d -> ["-I"; Dir.path d]) !visible_dirs) @
@@ -195,7 +206,7 @@ let rec compile_dependency : string -> string = fun fn ->
      via compilation of a .ml, and compilation of the .mli) *)
   if source_ext = ".ml" then begin
     try
-      let cmi_file = prefix ^ ".cmi" in
+      let cmi_file = (Filename.chop_suffix full_source_file ".ml") ^ ".cmi" in
       Printf.eprintf "[Load_path:compile_dependency] attempting to compile %s (ok if it doesn't exist)\n" cmi_file;
       ignore (compile_dependency cmi_file)
       (* we probably want exit code to be 0 as well... *)
@@ -216,6 +227,7 @@ let rec compile_dependency : string -> string = fun fn ->
   in
 
   (* add the new source file to global state *)
+  let dirname = Filename.dirname full_source_file in
   add_new_file_to_path dirname base;
   Printf.eprintf "[Load_path:compile_dependency] added %s to global state\n" (find_path base);
 
