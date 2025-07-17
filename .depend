@@ -7273,6 +7273,11 @@ driver/optmaindriver.cmx : \
     asmcomp/arch.cmx \
     driver/optmaindriver.cmi
 driver/optmaindriver.cmi :
+driver/parallelism.cmo : \
+    driver/parallelism.cmi
+driver/parallelism.cmx : \
+    driver/parallelism.cmi
+driver/parallelism.cmi :
 driver/pparse.cmo : \
     utils/warnings.cmi \
     utils/profile.cmi \
@@ -8927,6 +8932,7 @@ ocamldoc/odoc.cmo : \
     ocamldoc/odoc_config.cmi \
     ocamldoc/odoc_args.cmi \
     ocamldoc/odoc_analyse.cmi \
+    driver/handler_common.cmi \
     otherlibs/dynlink/dynlink.cmi \
     ocamldoc/odoc.cmi
 ocamldoc/odoc.cmx : \
@@ -8937,6 +8943,7 @@ ocamldoc/odoc.cmx : \
     ocamldoc/odoc_config.cmx \
     ocamldoc/odoc_args.cmx \
     ocamldoc/odoc_analyse.cmx \
+    driver/handler_common.cmx \
     otherlibs/dynlink/dynlink.cmx \
     ocamldoc/odoc.cmi
 ocamldoc/odoc.cmi :
@@ -9113,7 +9120,6 @@ ocamldoc/odoc_comments.cmo : \
     ocamldoc/odoc_types.cmi \
     ocamldoc/odoc_text.cmi \
     ocamldoc/odoc_see_lexer.cmi \
-    ocamldoc/odoc_parser.cmi \
     ocamldoc/odoc_misc.cmi \
     ocamldoc/odoc_messages.cmi \
     ocamldoc/odoc_merge.cmi \
@@ -9126,12 +9132,11 @@ ocamldoc/odoc_comments.cmx : \
     otherlibs/str/str.cmx \
     ocamldoc/odoc_types.cmx \
     ocamldoc/odoc_text.cmx \
-    ocamldoc/odoc_see_lexer.cmx \
-    ocamldoc/odoc_parser.cmx \
+    ocamldoc/odoc_see_lexer.cmi \
     ocamldoc/odoc_misc.cmx \
     ocamldoc/odoc_messages.cmx \
     ocamldoc/odoc_merge.cmx \
-    ocamldoc/odoc_lexer.cmx \
+    ocamldoc/odoc_lexer.cmi \
     ocamldoc/odoc_global.cmx \
     ocamldoc/odoc_cross.cmx \
     ocamldoc/odoc_comments_global.cmx \
@@ -9442,24 +9447,7 @@ ocamldoc/odoc_latex_style.cmo : \
 ocamldoc/odoc_latex_style.cmx : \
     ocamldoc/odoc_latex_style.cmi
 ocamldoc/odoc_latex_style.cmi :
-ocamldoc/odoc_lexer.cmo : \
-    otherlibs/str/str.cmi \
-    ocamldoc/odoc_parser.cmi \
-    ocamldoc/odoc_messages.cmi \
-    ocamldoc/odoc_global.cmi \
-    ocamldoc/odoc_comments_global.cmi \
-    utils/misc.cmi \
-    ocamldoc/odoc_lexer.cmi
-ocamldoc/odoc_lexer.cmx : \
-    otherlibs/str/str.cmx \
-    ocamldoc/odoc_parser.cmx \
-    ocamldoc/odoc_messages.cmx \
-    ocamldoc/odoc_global.cmx \
-    ocamldoc/odoc_comments_global.cmx \
-    utils/misc.cmx \
-    ocamldoc/odoc_lexer.cmi
-ocamldoc/odoc_lexer.cmi : \
-    ocamldoc/odoc_parser.cmi
+ocamldoc/odoc_lexer.cmi :
 ocamldoc/odoc_man.cmo : \
     otherlibs/str/str.cmi \
     middle_end/flambda/parameter.cmi \
@@ -9617,16 +9605,6 @@ ocamldoc/odoc_parameter.cmx : \
 ocamldoc/odoc_parameter.cmi : \
     typing/types.cmi \
     ocamldoc/odoc_types.cmi
-ocamldoc/odoc_parser.cmo : \
-    ocamldoc/odoc_types.cmi \
-    ocamldoc/odoc_comments_global.cmi \
-    ocamldoc/odoc_parser.cmi
-ocamldoc/odoc_parser.cmx : \
-    ocamldoc/odoc_types.cmx \
-    ocamldoc/odoc_comments_global.cmx \
-    ocamldoc/odoc_parser.cmi
-ocamldoc/odoc_parser.cmi : \
-    ocamldoc/odoc_types.cmi
 ocamldoc/odoc_print.cmo : \
     typing/types.cmi \
     typing/printtyp.cmi \
@@ -9698,14 +9676,7 @@ ocamldoc/odoc_search.cmi : \
     ocamldoc/odoc_extension.cmi \
     ocamldoc/odoc_exception.cmi \
     ocamldoc/odoc_class.cmi
-ocamldoc/odoc_see_lexer.cmo : \
-    ocamldoc/odoc_parser.cmi \
-    ocamldoc/odoc_see_lexer.cmi
-ocamldoc/odoc_see_lexer.cmx : \
-    ocamldoc/odoc_parser.cmx \
-    ocamldoc/odoc_see_lexer.cmi
-ocamldoc/odoc_see_lexer.cmi : \
-    ocamldoc/odoc_parser.cmi
+ocamldoc/odoc_see_lexer.cmi :
 ocamldoc/odoc_sig.cmo : \
     parsing/unit_info.cmi \
     typing/types.cmi \
@@ -9837,40 +9808,15 @@ ocamldoc/odoc_texi.cmi : \
     ocamldoc/odoc_info.cmi
 ocamldoc/odoc_text.cmo : \
     ocamldoc/odoc_types.cmi \
-    ocamldoc/odoc_text_parser.cmi \
     ocamldoc/odoc_text_lexer.cmi \
     ocamldoc/odoc_text.cmi
 ocamldoc/odoc_text.cmx : \
     ocamldoc/odoc_types.cmx \
-    ocamldoc/odoc_text_parser.cmx \
-    ocamldoc/odoc_text_lexer.cmx \
+    ocamldoc/odoc_text_lexer.cmi \
     ocamldoc/odoc_text.cmi
 ocamldoc/odoc_text.cmi : \
     ocamldoc/odoc_types.cmi
-ocamldoc/odoc_text_lexer.cmo : \
-    otherlibs/str/str.cmi \
-    ocamldoc/odoc_text_parser.cmi \
-    ocamldoc/odoc_misc.cmi \
-    ocamldoc/odoc_text_lexer.cmi
-ocamldoc/odoc_text_lexer.cmx : \
-    otherlibs/str/str.cmx \
-    ocamldoc/odoc_text_parser.cmx \
-    ocamldoc/odoc_misc.cmx \
-    ocamldoc/odoc_text_lexer.cmi
-ocamldoc/odoc_text_lexer.cmi : \
-    ocamldoc/odoc_text_parser.cmi
-ocamldoc/odoc_text_parser.cmo : \
-    otherlibs/str/str.cmi \
-    ocamldoc/odoc_types.cmi \
-    ocamldoc/odoc_misc.cmi \
-    ocamldoc/odoc_text_parser.cmi
-ocamldoc/odoc_text_parser.cmx : \
-    otherlibs/str/str.cmx \
-    ocamldoc/odoc_types.cmx \
-    ocamldoc/odoc_misc.cmx \
-    ocamldoc/odoc_text_parser.cmi
-ocamldoc/odoc_text_parser.cmi : \
-    ocamldoc/odoc_types.cmi
+ocamldoc/odoc_text_lexer.cmi :
 ocamldoc/odoc_to_text.cmo : \
     otherlibs/str/str.cmi \
     middle_end/flambda/parameter.cmi \
