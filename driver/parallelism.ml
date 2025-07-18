@@ -11,7 +11,6 @@ type message =
 
 (* A simple implementation of a message queue for inter-thread communication *)
 module MessageQueue : sig
-
   type t
 
   val create : unit -> t
@@ -22,7 +21,6 @@ module MessageQueue : sig
   val recv : t -> message
 
 end = struct
-
   type t = {
     queue : message Queue.t;
     mutex : Mutex.t;
@@ -61,7 +59,7 @@ let rec await p =
   | Resolved v -> v
   | Rejected exn -> raise exn
 
-module ThreadPool = struct
+module Pool = struct
   type pool_data = {
     domains : unit Domain.t array;
     message_queue : MessageQueue.t;
@@ -103,10 +101,11 @@ module ThreadPool = struct
     match Atomic.get pool with
     | None -> raise (Invalid_argument "cannot submit to a closed pool")
     | Some pool ->
-      MessageQueue.send (Task (task_decorator task promise)) pool.message_queue;
+      let message = Task (task_decorator task promise) in
+      MessageQueue.send message pool.message_queue;
     promise
 
-  let shutdown pool =
+  let join_and_shutdown pool =
     begin match Atomic.get pool with
     | None -> raise (Invalid_argument "pool is already closed")
     | Some pool ->

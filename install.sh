@@ -85,9 +85,10 @@ readonly lambda_SOURCES=$(addprefix lambda/ \
 
 readonly comp_SOURCES="\
   bytecomp/meta.ml bytecomp/opcodes.ml bytecomp/bytesections.ml \
-  bytecomp/dll.ml bytecomp/symtable.ml driver/pparse.ml driver/compenv.ml \
+  bytecomp/dll.ml bytecomp/symtable.ml driver/pparse.ml \
+  driver/handler_common.ml driver/parallelism.ml driver/compenv.ml \
   driver/main_args.ml driver/compmisc.ml driver/makedepend.ml \
-  driver/compile_common.ml driver/handler_common.ml"
+  driver/compile_common.ml"
 
 readonly ocamlmiddleend_SOURCES="\
   middle_end/internal_variable_names.cmo middle_end/linkage_name.cmo \

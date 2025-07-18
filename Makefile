@@ -194,12 +194,13 @@ comp_SOURCES = \
   bytecomp/dll.mli bytecomp/dll.ml \
   bytecomp/symtable.mli bytecomp/symtable.ml \
   driver/pparse.mli driver/pparse.ml \
+  driver/handler_common.mli driver/handler_common.ml \
+  driver/parallelism.mli driver/parallelism.ml \
   driver/compenv.mli driver/compenv.ml \
   driver/main_args.mli driver/main_args.ml \
   driver/compmisc.mli driver/compmisc.ml \
   driver/makedepend.mli driver/makedepend.ml \
-  driver/compile_common.mli driver/compile_common.ml \
-  driver/handler_common.mli driver/handler_common.ml
+  driver/compile_common.mli driver/compile_common.ml
 # All file format descriptions (including cmx{,s}) are in the
 # ocamlcommon library so that ocamlobjinfo can depend on them.
 
@@ -2368,6 +2369,8 @@ ocamlcp_ocamloptp_SOURCES = \
   terminfo.mli terminfo.ml \
   location.mli location.ml \
   ccomp.mli ccomp.ml \
+  parallelism.mli parallelism.ml \
+  driver/handler_common.mli driver/handler_common.ml \
   compenv.mli compenv.ml \
   main_args.mli main_args.ml \
   ocamlcp_common.mli ocamlcp_common.ml

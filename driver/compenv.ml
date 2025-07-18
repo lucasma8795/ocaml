@@ -14,6 +14,7 @@
 (**************************************************************************)
 
 open Clflags
+open Parallelism
 
 exception Exit_with_status of int
 
@@ -640,7 +641,7 @@ type action_context = {
   ocaml_lib_ext: string;
 }
 
-let process_action ctx action =
+let process_action ctx pool action =
   let { log = ppf;
         compile_implementation;
         compile_interface;
@@ -655,13 +656,20 @@ let process_action ctx action =
   in
   match action with
   | ProcessImplementation name ->
+      Printf.eprintf "[ProcessImplementation] %s\n%!" name;
       impl ~start_from:Compiler_pass.Parsing name
   | ProcessInterface name ->
+      Printf.eprintf "[ProcessInterface] %s\n%!" name;
       readenv ppf (Before_compile name);
       let opref = output_prefix name in
-      compile_interface ~source_file:name ~output_prefix:opref;
+
+      let task () = compile_interface ~source_file:name ~output_prefix:opref in
+      let promise = Pool.submit pool (fun () -> Handler_common.handle task) in
+      ignore promise; (* not the best idea... *)
+
       if !make_package then objfiles := (opref ^ ".cmi") :: !objfiles
   | ProcessCFile name ->
+      Printf.eprintf "[ProcessCFile] %s\n%!" name;
       readenv ppf (Before_compile name);
       Location.input_name := name;
       let obj_name = match !output_name with
@@ -672,10 +680,13 @@ let process_action ctx action =
       then raise (Exit_with_status 2);
       ccobjs := obj_name :: !ccobjs
   | ProcessObjects names ->
+      Printf.eprintf "[ProcessObjects] %s\n%!" (String.concat ", " names);
       ccobjs := names @ !ccobjs
   | ProcessDLLs names ->
+      Printf.eprintf "[ProcessDLLs] %s\n%!" (String.concat ", " names);
       dllibs := names @ !dllibs
   | ProcessOtherFile name ->
+      Printf.eprintf "[ProcessOtherFile] %s\n%!" name;
       if Filename.check_suffix name ocaml_mod_ext
       || Filename.check_suffix name ocaml_lib_ext then
         objfiles := name :: !objfiles
@@ -741,7 +752,13 @@ let process_deferred_actions env =
     end
   else if !deferred_actions = [] then
     fatal "No input files";
-  List.iter (process_action env) (List.rev !deferred_actions);
+
+  (* let num_domains = Domain.recommended_domain_count () in *)
+  let num_domains = 2 in
+  let pool = Pool.create num_domains in
+  List.iter (process_action env pool) (List.rev !deferred_actions);
+  Pool.join_and_shutdown pool;
+
   output_name := final_output_name;
   stop_early :=
     !compile_only ||
