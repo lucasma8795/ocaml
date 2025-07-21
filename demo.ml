@@ -1,13 +1,12 @@
 open Parallelism
 
-let counter = Atomic.make 0
-
 let () =
   let num_domains = Domain.recommended_domain_count () in
   Printf.printf "Creating a pool with %d domains...\n%!" num_domains;
   let pool = Pool.create num_domains in
 
   let x = ref 0 in
+  let counter = Atomic.make 0 in
   let incr () =
     x := !x + 1;
     let promise = Pool.submit pool (fun () -> Atomic.incr counter) in

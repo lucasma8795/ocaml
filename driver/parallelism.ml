@@ -74,8 +74,6 @@ module Pool = struct
     task_queue : task TSQueue.t;
     suspended_tasks : ((unit, unit) continuation * unit promise) list ref;
     suspended_tasks_mutex : Mutex.t;
-    (* mark the pool as closed, so that no new tasks can be submitted *)
-    pending_shutdown : bool Atomic.t;
     active_tasks : int Atomic.t;
   }
 
@@ -137,7 +135,6 @@ module Pool = struct
       task_queue = TSQueue.create ();
       suspended_tasks = ref [];
       suspended_tasks_mutex = Mutex.create ();
-      pending_shutdown = Atomic.make false;
       active_tasks = Atomic.make 0;
     }) in
 
