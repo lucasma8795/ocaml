@@ -1,3 +1,6 @@
+open Effect
+open Effect.Deep
+
 type 'a promise_state =
 | Pending
 | Resolved of 'a
@@ -5,24 +8,15 @@ type 'a promise_state =
 
 type 'a promise = 'a promise_state Atomic.t
 
-type message =
-| Task of (unit -> unit)
-| Shutdown
+type task = unit -> unit
 
-(* A simple implementation of a message queue for inter-thread communication *)
-module MessageQueue : sig
-  type t
+exception Pool_closed
 
-  val create : unit -> t
+type _ Effect.t += Suspend_task : unit promise -> unit Effect.t
 
-  val send : message -> t -> unit
-
-  (* blocks domain until a message is available *)
-  val recv : t -> message
-
-end = struct
-  type t = {
-    queue : message Queue.t;
+module TSQueue = struct
+  type 'a t = {
+    queue : 'a Queue.t;
     mutex : Mutex.t;
     nonempty : Condition.t;
   }
@@ -33,27 +27,42 @@ end = struct
     nonempty = Condition.create ();
   }
 
-  let send message mq =
-    Mutex.lock mq.mutex;
-    Queue.add message mq.queue;
-    Condition.signal mq.nonempty;
-    Mutex.unlock mq.mutex
+  let add x q =
+    Mutex.lock q.mutex;
+    Queue.add x q.queue;
+    Condition.signal q.nonempty;
+    Mutex.unlock q.mutex
 
-  let recv mq =
-    Mutex.lock mq.mutex;
+  let take q =
+    Mutex.lock q.mutex;
 
-    (* block until there is a message available *)
-    while Queue.is_empty mq.queue do
-      Condition.wait mq.nonempty mq.mutex
+    (* block domain until there is an element available *)
+    while Queue.is_empty q.queue do
+      Condition.wait q.nonempty q.mutex
     done;
 
-    let message = Queue.take mq.queue in
-    Mutex.unlock mq.mutex;
-    message
+    let elt = Queue.take q.queue in
+    Mutex.unlock q.mutex;
+    elt
+
+  let take_opt q =
+    Mutex.lock q.mutex;
+    let ret =
+      if Queue.is_empty q.queue then
+        None
+      else
+        Some (Queue.take q.queue) in
+    Mutex.unlock q.mutex;
+    ret
+
+  let is_empty q =
+    Mutex.lock q.mutex;
+    let ret = Queue.is_empty q.queue in
+    Mutex.unlock q.mutex;
+    ret
 end
 
 let rec await p =
-  (* todo: can we utilize Condition? *)
   match Atomic.get p with
   | Pending -> Domain.cpu_relax (); await p
   | Resolved v -> v
@@ -62,63 +71,123 @@ let rec await p =
 module Pool = struct
   type pool_data = {
     domains : unit Domain.t array;
-    message_queue : MessageQueue.t;
+    task_queue : task TSQueue.t;
+    suspended_tasks : ((unit, unit) continuation * unit promise) list ref;
+    suspended_tasks_mutex : Mutex.t;
+    (* mark the pool as closed, so that no new tasks can be submitted *)
+    pending_shutdown : bool Atomic.t;
+    active_tasks : int Atomic.t;
   }
 
-  (* None iff pool is already closed
-     Atomic.t should make the pool safe to pass between domains...? *)
   type t = pool_data option Atomic.t
 
-  (* worker loop *)
-  let rec worker mq =
-    let msg = MessageQueue.recv mq in
-    match msg with
-    | Task f -> f (); worker mq
-    | Shutdown -> ()
+  (* worker loop that is executed in each child domain *)
+  let rec worker (pool : t) =
+    match Atomic.get pool with
+    | None -> () (* quit *)
+    | Some p -> begin
+      (* check if suspended tasks can be resumed *)
+      Mutex.lock p.suspended_tasks_mutex;
+      let pred = fun (_, promise) -> Atomic.get promise <> Pending in
+      let (resumable_tasks, new_suspended_tasks) =
+        List.partition pred !(p.suspended_tasks)
+      in
 
-  (* decorates a task with ability to modify its corresponding promise *)
-  let task_decorator (type a) (task : unit -> a) (p : a promise) () : unit =
-    try
-      Atomic.set p (Resolved (task ()))
-    with exn ->
-      Atomic.set p (Rejected exn)
+      (* resume suspended tasks *)
+      List.iter (fun (fiber, promise) ->
+        let task =
+          match Atomic.get promise with
+          | Resolved v -> fun () -> continue fiber v
+          | Rejected exn -> fun () -> discontinue fiber exn
+          | Pending -> failwith "impossible" (* should have been filtered out *)
+        in
+        TSQueue.add task p.task_queue
+      ) resumable_tasks;
 
+      (* update the suspended tasks list *)
+      p.suspended_tasks := new_suspended_tasks;
+      Mutex.unlock p.suspended_tasks_mutex;
+
+      (* wait for a new task or shutdown signal *)
+      let task = TSQueue.take p.task_queue in
+      try_with task ()
+      {
+        effc = (fun (type c) (eff: c Effect.t) ->
+          match eff with
+          | Suspend_task promise ->
+            Some (fun (k: (c, _) continuation) ->
+              (* store in suspended tasks list *)
+              Mutex.lock p.suspended_tasks_mutex;
+              p.suspended_tasks := (k, promise) :: !(p.suspended_tasks);
+              Mutex.unlock p.suspended_tasks_mutex
+            )
+          | _ -> None
+        )
+      };
+      worker pool
+    end
+
+  (* decorates a task with ability to update state after finishing *)
   let create num_domains =
     if num_domains <= 0 then
       raise (Invalid_argument "number of domains must be positive");
 
-    let mq = MessageQueue.create () in
-    let new_domain = fun _ -> Domain.spawn (fun () -> worker mq) in
-    let pool = {
-      domains = Array.init num_domains new_domain;
-      message_queue = mq;
-    } in
+    let pool : t = Atomic.make (Some {
+      domains = [||];  (* will be filled later *)
+      task_queue = TSQueue.create ();
+      suspended_tasks = ref [];
+      suspended_tasks_mutex = Mutex.create ();
+      pending_shutdown = Atomic.make false;
+      active_tasks = Atomic.make 0;
+    }) in
 
-    Atomic.make (Some pool)
+    (* now create the domains *)
+    let make_new_domain = fun _ -> Domain.spawn (fun () -> worker pool) in
+    let domains = Array.init num_domains make_new_domain in
+
+    (* update the pool with the actual domains *)
+    begin match Atomic.get pool with
+    | Some pool_data -> Atomic.set pool (Some { pool_data with domains })
+    | None -> failwith "impossible";
+    end;
+
+    pool
 
   let submit pool task =
     let promise = Atomic.make Pending in
     match Atomic.get pool with
-    | None -> raise (Invalid_argument "cannot submit to a closed pool")
-    | Some pool ->
-      let message = Task (task_decorator task promise) in
-      MessageQueue.send message pool.message_queue;
+    | None -> raise Pool_closed
+    | Some p -> begin
+        Atomic.incr p.active_tasks;
+        let wrapped_task = fun () ->
+          try
+            let result = task () in
+            Atomic.set promise (Resolved result);
+            Atomic.decr p.active_tasks;
+          with exn ->
+            Atomic.set promise (Rejected exn);
+            Atomic.decr p.active_tasks
+        in
+        TSQueue.add wrapped_task p.task_queue;
+      end;
     promise
 
   let join_and_shutdown pool =
-    begin match Atomic.get pool with
-    | None -> raise (Invalid_argument "pool is already closed")
-    | Some pool ->
-      (* signal all worker threads to shut down *)
-      let num_domains = Array.length pool.domains in
-      for _ = 0 to num_domains - 1 do
-        MessageQueue.send Shutdown pool.message_queue;
+    match Atomic.get pool with
+    | None -> raise Pool_closed
+    | Some p ->
+      (* wait for all tasks to finish *)
+      while Atomic.get p.active_tasks > 0 do
+        Domain.cpu_relax ();
       done;
 
-      (* block until all domains finish *)
-      Array.iter Domain.join pool.domains;
-    end;
+      Atomic.set pool None; (* mark the pool as closed *)
 
-    (* mark the pool as closed *)
-    Atomic.set pool None;
+      (* temporary hack: wake up blocked workers *)
+      for _ = 1 to Array.length p.domains do
+        TSQueue.add (fun () -> ()) p.task_queue
+      done;
+      Array.iter Domain.join p.domains;
 end
+
+let suspend_on p = perform (Suspend_task p)
