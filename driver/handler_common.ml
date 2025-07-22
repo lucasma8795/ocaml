@@ -79,7 +79,7 @@ let auto_include find_in_dir fn =
   end else begin
     Printf.eprintf "[Load_path:auto_include] Clflags.no_std_include is false, continue\n";
     let alert = Location.auto_include_alert in
-    Load_path.auto_include_otherlibs alert find_in_dir fn
+    auto_include_otherlibs alert find_in_dir fn
   end
 
 let prepend_add dir =
