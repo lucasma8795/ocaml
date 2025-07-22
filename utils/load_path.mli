@@ -125,6 +125,7 @@ type _ Effect.t +=
   | Find_path : string -> string Effect.t
   | Find_normalized_with_visibility : string -> (string * visibility) Effect.t
   | Append_dir  : Dir.t -> unit Effect.t
+  | Auto_include_otherlibs : (string -> unit) -> auto_include_callback Effect.t
   | Prepend_dir : Dir.t -> unit Effect.t
   | Remove_dir  : string -> unit Effect.t
   | Reset_path  : unit Effect.t

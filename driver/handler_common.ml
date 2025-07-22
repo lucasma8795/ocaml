@@ -21,8 +21,56 @@ let is_basename fn = Filename.basename fn = fn
 let get_visible_path_list () = List.rev_map Dir.path !visible_dirs
 let get_hidden_path_list () = List.rev_map Dir.path !hidden_dirs
 
+let append_dir dir =
+  let update base fn visible_files hidden_files =
+    if Dir.hidden dir && not (STbl.mem !hidden_files base) then
+      STbl.replace !hidden_files base fn
+    else if not (STbl.mem !visible_files base) then
+      STbl.replace !visible_files base fn
+  in
+  List.iter
+    (fun base ->
+      Result.iter (fun ubase ->
+          let fn = Filename.concat (Dir.path dir) base in
+          update base fn visible_files hidden_files;
+          update ubase fn visible_files_uncap hidden_files_uncap
+        )
+        (Misc.normalized_unit_filename base)
+    )
+    (Dir.files dir);
+  if Dir.hidden dir then
+    hidden_dirs := dir :: !hidden_dirs
+  else
+    visible_dirs := dir :: !visible_dirs
+
 let get_path_list () =
   Misc.rev_map_end Dir.path !visible_dirs (List.rev_map Dir.path !hidden_dirs)
+
+let auto_include_libs libs alert find_in_dir fn =
+  Printf.eprintf "[Load_path:auto_include] (entering with fn=%s)\n" fn;
+  let scan (lib, lazy dir) =
+    let file = find_in_dir dir fn in
+    let alert_and_add_dir _ =
+      alert lib;
+      append_dir dir
+    in
+    Option.iter alert_and_add_dir file;
+    file
+  in
+  match List.find_map scan libs with
+  | Some base -> base
+  | None -> begin
+    Printf.eprintf "[Load_path:auto_include] failed, aborting (fn=%s)\n" fn;
+    raise Not_found;
+  end
+
+let auto_include_otherlibs : (string -> unit) -> Load_path.auto_include_callback =
+  (* Ensure directories are only ever scanned once *)
+  let expand = Misc.expand_directory Config.standard_library in
+  let otherlibs =
+    let read_lib lib = lazy (Dir.create ~hidden:false (expand ("+" ^ lib))) in
+    List.map (fun lib -> (lib, read_lib lib)) ["dynlink"; "str"; "unix"] in
+  auto_include_libs otherlibs
 
 let auto_include find_in_dir fn =
   if !Clflags.no_std_include then begin
@@ -114,27 +162,14 @@ let handle f =
       (* append_dir : Dir.t -> unit *)
       | Load_path.Append_dir dir ->
         Some (fun (k: (c, _) continuation) ->
-          let update base fn visible_files hidden_files =
-            if Dir.hidden dir && not (STbl.mem !hidden_files base) then
-              STbl.replace !hidden_files base fn
-            else if not (STbl.mem !visible_files base) then
-              STbl.replace !visible_files base fn
-          in
-          List.iter
-            (fun base ->
-              Result.iter (fun ubase ->
-                  let fn = Filename.concat (Dir.path dir) base in
-                  update base fn visible_files hidden_files;
-                  update ubase fn visible_files_uncap hidden_files_uncap
-                )
-                (Misc.normalized_unit_filename base)
-            )
-            (Dir.files dir);
-          if Dir.hidden dir then
-            hidden_dirs := dir :: !hidden_dirs
-          else
-            visible_dirs := dir :: !visible_dirs;
+          append_dir dir;
           Effect.Deep.continue k ()
+        )
+
+      (* auto_include_otherlibs : (string -> unit) -> auto_include_callback *)
+      | Load_path.Auto_include_otherlibs alert ->
+        Some (fun (k: (c, _) continuation) ->
+          Effect.Deep.continue k (auto_include_otherlibs alert)
         )
 
       (* prepend_dir : Dir.t -> unit *)
