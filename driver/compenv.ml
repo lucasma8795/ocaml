@@ -14,7 +14,6 @@
 (**************************************************************************)
 
 open Clflags
-open Parallelism
 
 exception Exit_with_status of int
 
@@ -641,7 +640,7 @@ type action_context = {
   ocaml_lib_ext: string;
 }
 
-let process_action ctx pool action =
+let process_action ctx action =
   let { log = ppf;
         compile_implementation;
         compile_interface;
@@ -662,11 +661,7 @@ let process_action ctx pool action =
       Printf.eprintf "[ProcessInterface] %s\n%!" name;
       readenv ppf (Before_compile name);
       let opref = output_prefix name in
-
-      let task () = compile_interface ~source_file:name ~output_prefix:opref in
-      let promise = Pool.submit pool (fun () -> Handler_common.handle task) in
-      ignore promise; (* not the best idea... *)
-
+      compile_interface ~source_file:name ~output_prefix:opref;
       if !make_package then objfiles := (opref ^ ".cmi") :: !objfiles
   | ProcessCFile name ->
       Printf.eprintf "[ProcessCFile] %s\n%!" name;
@@ -754,10 +749,7 @@ let process_deferred_actions env =
     fatal "No input files";
 
   (* let num_domains = Domain.recommended_domain_count () in *)
-  let num_domains = 2 in
-  let pool = Pool.create num_domains in
-  List.iter (process_action env pool) (List.rev !deferred_actions);
-  Pool.join_and_shutdown pool;
+  List.iter (process_action env) (List.rev !deferred_actions);
 
   output_name := final_output_name;
   stop_early :=

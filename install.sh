@@ -1,4 +1,3 @@
-
 #!/bin/sh
 
 # This script builds and installs OCaml to ./install
@@ -183,18 +182,21 @@ redirect_to_logfile() {
 # Invoke the OCaml compiler
 ocamlc()
 {
-  redirect_to_logfile "${BOOT_DIR}/ocamlrun" "${BOOT_DIR}/ocamlc" "$@"
+  redirect_to_logfile "./custom-ocamlc" "$@"
 }
 
 # Invoke the OCaml compiler
 ocamlrun()
 {
-  redirect_to_logfile "${BOOT_DIR}/ocamlrun" "$@"
+  redirect_to_logfile "boot/ocamlrun" "$@"
 }
 
 # Initialize the core part of the build system
 init_build()
 {
+  # Build custom compiler
+  ../v1/bin/ocamlc ocamlcommon.cma ocamlbytecomp.cma unix.cma custom_ocamlc.ml -I +compiler-libs -o custom-ocamlc
+
   # Check that boot/ocamlc exists
   if [ ! -x "${BOOT_DIR}/ocamlc" ]; then
     error "Missing distribution compiler! (boot/ocamlc)"

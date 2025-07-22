@@ -73,6 +73,7 @@ type _ Effect.t +=
   | Find_path : string -> string Effect.t
   | Find_normalized_with_visibility : string -> (string * visibility) Effect.t
   | Append_dir  : Dir.t -> unit Effect.t
+  | Auto_include_otherlibs : (string -> unit) -> auto_include_callback Effect.t
   | Prepend_dir : Dir.t -> unit Effect.t
   | Remove_dir  : string -> unit Effect.t
   | Reset_path  : unit Effect.t
@@ -117,31 +118,9 @@ let prepend_dir (dir : Dir.t) =
   assert (not Config.merlin || Local_store.is_bound ());
   perform (Prepend_dir dir)
 
-let auto_include_libs libs alert find_in_dir fn =
-  Printf.eprintf "[Load_path:auto_include] (entering with fn=%s)\n" fn;
-  let scan (lib, lazy dir) =
-    let file = find_in_dir dir fn in
-    let alert_and_add_dir _ =
-      alert lib;
-      append_dir dir
-    in
-    Option.iter alert_and_add_dir file;
-    file
-  in
-  match List.find_map scan libs with
-  | Some base -> base
-  | None -> begin
-    Printf.eprintf "[Load_path:auto_include] failed, aborting (fn=%s)\n" fn;
-    raise Not_found;
-  end
-
-let auto_include_otherlibs =
-  (* Ensure directories are only ever scanned once *)
-  let expand = Misc.expand_directory Config.standard_library in
-  let otherlibs =
-    let read_lib lib = lazy (Dir.create ~hidden:false (expand ("+" ^ lib))) in
-    List.map (fun lib -> (lib, read_lib lib)) ["dynlink"; "str"; "unix"] in
-  auto_include_libs otherlibs
+let auto_include_otherlibs alert find_in_dir fn =
+  let callback = perform (Auto_include_otherlibs alert) in
+  callback find_in_dir fn
 
 let find fn =
   assert (not Config.merlin || Local_store.is_bound ());

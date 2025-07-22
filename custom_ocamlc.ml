@@ -220,7 +220,11 @@ let rec compile_dependency : string -> string = fun fn ->
 
   else
 
-  let compile : unit -> unit = fun () ->
+  let compile : unit -> unit =
+    (* list of PIDs of compiling processes *)
+    let compilation_processes : int list ref =
+
+    fun () ->
     (* construct -I and -H args *)
     let load_path_args =
       List.flatten (List.map (fun d -> ["-I"; Dir.path d]) !visible_dirs) @
@@ -235,13 +239,19 @@ let rec compile_dependency : string -> string = fun fn ->
        "-warn-error"; "+a"; "-bin-annot"; "-strict-formats"] @ load_path_args
     in
 
-    let cmd = Filename.quote_command prog args in
+    (* let cmd = Filename.quote_command prog args in
     Printf.eprintf "[Sys.command] %s\n" cmd;
     let exit_code = Sys.command cmd in
-    Printf.eprintf "[compile_dependency] exit code: %d\n" exit_code;
+    Printf.eprintf "[compile_dependency] exit code: %d\n" exit_code; *)
 
-    (* todo: throw exception instead? *)
-    assert (exit_code = 0)
+    let args = Array.of_list (prog :: args) in
+    let pid = Unix.create_process prog args Unix.stdin Unix.stdout Unix.stderr in
+    let (_, process_status) = Unix.waitpid [] pid in
+    match process_status with
+    | Unix.WEXITED 0 -> Printf.eprintf "[compile_dependency/compile] %s compiled successfully!\n" full_source_file
+    | Unix.WEXITED exit_code -> Printf.eprintf "[compile_dependency/compile] compilation of %s exited with abnormal exit code: %d\n" full_source_file exit_code
+    | Unix.WSIGNALED signal -> Printf.eprintf "[compile_dependency/compile] compilation of %s killed by signal %d\n" full_source_file signal
+    | Unix.WSTOPPED signal -> Printf.eprintf "[compile_dependency/compile] compilation of %s stopped by signal %d\n" full_source_file signal
   in
 
   (* if we are compiling a .ml, compile the .mli if it exists (it is ok if not)
@@ -417,3 +427,10 @@ let handle f =
 
       | _ -> None
   }
+
+(* entry point *)
+let () =
+  let run () = exit (Maindriver.main Sys.argv Format.err_formatter) in
+  handle run
+
+(* ../v1/bin/ocamlc ocamlcommon.cma ocamlbytecomp.cma main.ml -I +compiler-libs -o custom-ocamlc *)
