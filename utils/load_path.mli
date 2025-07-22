@@ -53,6 +53,8 @@ module Dir : sig
   val find_normalized : t -> string -> string option
   (** As {!find}, but search also for uncapitalized name, i.e. if name is
       Foo.ml, either /path/Foo.ml or /path/foo.ml may be returned. *)
+
+  val add_file : t -> string -> unit
 end
 
 type auto_include_callback =

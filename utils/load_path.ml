@@ -17,16 +17,16 @@ open Effect
 module Dir = struct
   type t = {
     path : string;
-    files : string list;
+    files : string list ref;
     hidden : bool;
   }
 
   let path t = t.path
-  let files t = t.files
+  let files t = !(t.files)
   let hidden t = t.hidden
 
   let find t fn =
-    if List.mem fn t.files then
+    if List.mem fn !(t.files) then
       Some (Filename.concat t.path fn)
     else
       None
@@ -39,7 +39,7 @@ module Dir = struct
       else
         None
     in
-    List.find_map search t.files
+    List.find_map search !(t.files)
 
   (* For backward compatibility reason, simulate the behavior of
      [Misc.find_in_path]: silently ignore directories that don't exist
@@ -51,7 +51,11 @@ module Dir = struct
       [||]
 
   let create ~hidden path =
-    { path; files = Array.to_list (readdir_compat path); hidden }
+    { path; files = ref (Array.to_list (readdir_compat path)); hidden }
+
+  let add_file t fn =
+    if not (List.mem fn !(t.files)) then
+      t.files := fn :: !(t.files)
 end
 
 type auto_include_callback =
@@ -114,7 +118,7 @@ let prepend_dir (dir : Dir.t) =
   perform (Prepend_dir dir)
 
 let auto_include_libs libs alert find_in_dir fn =
-  Printf.eprintf "[Load_path:auto_include] (entering with fn = %s)\n" fn;
+  Printf.eprintf "[Load_path:auto_include] (entering with fn=%s)\n" fn;
   let scan (lib, lazy dir) =
     let file = find_in_dir dir fn in
     let alert_and_add_dir _ =
@@ -127,7 +131,7 @@ let auto_include_libs libs alert find_in_dir fn =
   match List.find_map scan libs with
   | Some base -> base
   | None -> begin
-    Printf.eprintf "[Load_path:auto_include] failed, aborting (fn = %s)\n" fn;
+    Printf.eprintf "[Load_path:auto_include] failed, aborting (fn=%s)\n" fn;
     raise Not_found;
   end
 
