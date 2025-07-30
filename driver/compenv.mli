@@ -79,3 +79,5 @@ val process_deferred_actions : action_context -> unit
 *)
 val parse_arguments : ?current:(int ref)
       -> string array ref -> Arg.anon_fun -> string -> unit
+
+val deferred_actions : deferred_action list ref

@@ -23,6 +23,8 @@ type info = {
   native : bool;
 }
 
+let debug_info_env info = Env.debug info.env
+
 let with_info ~native ~tool_name ~dump_ext unit_info k =
   Compmisc.init_path ();
   Env.set_current_unit unit_info ;

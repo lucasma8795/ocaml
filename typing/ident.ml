@@ -29,6 +29,15 @@ type t =
 
 (* A stamp of 0 denotes a persistent identifier *)
 
+let to_string = function
+  | Local { name; stamp } ->
+      Printf.sprintf "Local (%s/%d)" name stamp
+  | Scoped { name; stamp; scope } ->
+      Printf.sprintf "Scoped (%s/%d[%d])" name stamp scope
+  | Global name ->
+      Printf.sprintf "Global (%s)" name
+  | Predef { name; stamp } ->
+      Printf.sprintf "Predef (%s/%d)" name stamp
 let currentstamp = s_ref 0
 let predefstamp = s_ref 0
 
@@ -214,6 +223,13 @@ let empty = Empty
  *     Empty -> 0
  *   | Node(_,_,_,h) -> h
  *)
+
+let rec debug_tbl = function
+  | Empty -> ()
+  | Node (l, k, r, _) ->
+      Printf.eprintf "[ident:debug_tbl] %s\n%!" (unique_name k.ident);
+      debug_tbl l;
+      debug_tbl r
 
 let mknode l d r =
   let hl = match l with Empty -> 0 | Node(_,_,_,h) -> h

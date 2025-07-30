@@ -170,6 +170,8 @@ let rec iter_exn_names f pat =
   | _ -> ()
 
 let transl_ident loc env ty path desc =
+  Printf.eprintf "[Translcore:transl_ident]\n%!";
+  Env.debug env;
   match desc.val_kind with
   | Val_prim p ->
       Translprim.transl_primitive loc p env ty (Some path)

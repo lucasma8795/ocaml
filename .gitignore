@@ -338,3 +338,4 @@ META
 .vscode
 v1
 main.ml
+custom-ocamlc

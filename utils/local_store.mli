@@ -45,7 +45,7 @@ val s_table : ('a -> 'b) -> 'a -> 'b ref
 
 type store
 
-val fresh : unit -> store
+val fresh : string -> store
 (** Returns a fresh instance of the store.
 
     The first time this function is called, it snapshots the value of all the

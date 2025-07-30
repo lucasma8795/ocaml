@@ -57,7 +57,7 @@ let emit_bytecode i (bytecode, required_globals) =
          (Emitcode.to_file oc cmo ~required_globals);
     )
 
-let implementation ~start_from ~source_file ~output_prefix =
+(* let implementation ~start_from ~source_file ~output_prefix =
   let backend info typed =
     let bytecode = to_bytecode info typed in
     emit_bytecode info bytecode
@@ -67,4 +67,18 @@ let implementation ~start_from ~source_file ~output_prefix =
   match (start_from : Clflags.Compiler_pass.t) with
   | Parsing -> Compile_common.implementation info ~backend
   | _ -> Misc.fatal_errorf "Cannot start from %s"
-           (Clflags.Compiler_pass.to_string start_from)
+           (Clflags.Compiler_pass.to_string start_from) *)
+
+let implementation ~start_from ~source_file ~output_prefix =
+  let backend info typed =
+    let bytecode = to_bytecode info typed in
+    emit_bytecode info bytecode
+  in
+  let unit_info = Unit_info.make ~source_file Impl output_prefix in
+  let info_function = fun info ->
+    match (start_from : Clflags.Compiler_pass.t) with
+    | Parsing -> Compile_common.implementation info ~backend
+    | _ -> Misc.fatal_errorf "Cannot start from %s"
+             (Clflags.Compiler_pass.to_string start_from)
+  in
+  with_info ~dump_ext:"cmo" unit_info info_function

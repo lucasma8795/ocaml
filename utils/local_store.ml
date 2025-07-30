@@ -50,9 +50,9 @@ let s_ref k =
   ref
 
 type slot = Slot : { ref : 'a ref; mutable value : 'a } -> slot
-type store = slot list
+type store = slot list * string
 
-let fresh () =
+let fresh name =
   let slots =
     List.map (function
       | Table { ref; init } -> Slot {ref; value = init ()}
@@ -61,13 +61,15 @@ let fresh () =
           Slot { ref = r.ref; value = r.snapshot }
     ) global_bindings.refs
   in
+  Printf.eprintf "[local_store:fresh] Created new store with %d slots\n%!" (List.length slots);
   global_bindings.frozen <- true;
-  slots
+  slots, name
 
-let with_store slots f =
+let with_store (slots, name) f =
   assert (not global_bindings.is_bound);
   global_bindings.is_bound <- true;
   List.iter (fun (Slot {ref;value}) -> ref := value) slots;
+  Printf.eprintf "[local_store:with_store] Restored %d slots for store '%s'\n%!" (List.length slots) name;
   Fun.protect f ~finally:(fun () ->
     List.iter (fun (Slot s) -> s.value <- !(s.ref)) slots;
     global_bindings.is_bound <- false;

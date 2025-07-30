@@ -25,6 +25,8 @@ type info = {
 }
 (** Information needed to compile a file. *)
 
+val debug_info_env : info -> unit
+
 val with_info :
   native:bool ->
   tool_name:string ->

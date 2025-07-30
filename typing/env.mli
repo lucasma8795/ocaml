@@ -54,6 +54,8 @@ type address =
 
 type t
 
+val debug : t -> unit
+
 val empty: t
 val initial: t
 val diff: t -> t -> Ident.t list

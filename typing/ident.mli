@@ -17,6 +17,8 @@
 
 type t
 
+val to_string : t -> string
+
 include Identifiable.S with type t := t
 (* Notes:
    - [equal] compares identifiers by name
@@ -98,6 +100,8 @@ type 'a tbl
    really need to query bindings by user-visible name, not just by
    unique identifiers.
 *)
+
+val debug_tbl: 'a tbl -> unit
 
 val empty: 'a tbl
 val add: t -> 'a -> 'a tbl -> 'a tbl
