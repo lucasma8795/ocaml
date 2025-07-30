@@ -655,16 +655,16 @@ let process_action ctx action =
   in
   match action with
   | ProcessImplementation name ->
-      Printf.eprintf "[ProcessImplementation] %s\n%!" name;
+      Printf.eprintf ">> [ProcessImplementation] %s\n%!" name;
       impl ~start_from:Compiler_pass.Parsing name
   | ProcessInterface name ->
-      Printf.eprintf "[ProcessInterface] %s\n%!" name;
+      Printf.eprintf ">> [ProcessInterface] %s\n%!" name;
       readenv ppf (Before_compile name);
       let opref = output_prefix name in
       compile_interface ~source_file:name ~output_prefix:opref;
       if !make_package then objfiles := (opref ^ ".cmi") :: !objfiles
   | ProcessCFile name ->
-      Printf.eprintf "[ProcessCFile] %s\n%!" name;
+      Printf.eprintf ">> [ProcessCFile] %s\n%!" name;
       readenv ppf (Before_compile name);
       Location.input_name := name;
       let obj_name = match !output_name with
@@ -675,13 +675,13 @@ let process_action ctx action =
       then raise (Exit_with_status 2);
       ccobjs := obj_name :: !ccobjs
   | ProcessObjects names ->
-      Printf.eprintf "[ProcessObjects] %s\n%!" (String.concat ", " names);
+      Printf.eprintf ">> [ProcessObjects] %s\n%!" (String.concat ", " names);
       ccobjs := names @ !ccobjs
   | ProcessDLLs names ->
-      Printf.eprintf "[ProcessDLLs] %s\n%!" (String.concat ", " names);
+      Printf.eprintf ">> [ProcessDLLs] %s\n%!" (String.concat ", " names);
       dllibs := names @ !dllibs
   | ProcessOtherFile name ->
-      Printf.eprintf "[ProcessOtherFile] %s\n%!" name;
+      Printf.eprintf ">> [ProcessOtherFile] %s\n%!" name;
       if Filename.check_suffix name ocaml_mod_ext
       || Filename.check_suffix name ocaml_lib_ext then
         objfiles := name :: !objfiles

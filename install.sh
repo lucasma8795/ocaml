@@ -180,9 +180,14 @@ redirect_to_logfile() {
 }
 
 # Invoke the OCaml compiler
-ocamlc()
+ocamlc_v1()
 {
   redirect_to_logfile "./custom-ocamlc" "$@"
+}
+
+boot_ocamlc()
+{
+  redirect_to_logfile "boot/ocamlrun" "boot/ocamlc" "$@"
 }
 
 # Invoke the OCaml compiler
@@ -194,8 +199,7 @@ ocamlrun()
 # Initialize the core part of the build system
 init_build()
 {
-  # Build custom compiler
-  ../v1/bin/ocamlc ocamlcommon.cma ocamlbytecomp.cma unix.cma custom_ocamlc.ml -I +compiler-libs -o custom-ocamlc
+  export CAML_LD_LIBRARY_PATH=
 
   # Check that boot/ocamlc exists
   if [ ! -x "${BOOT_DIR}/ocamlc" ]; then
@@ -206,6 +210,9 @@ init_build()
   # Set up log files
   mkdir "$INSTALL_DIR"
   cat /dev/null > "$LOG_FILE"
+
+  # Build custom compiler
+  redirect_to_logfile ../v1/bin/ocamlc ocamlcommon.cma ocamlbytecomp.cma unix.cma custom_ocamlc.ml -I +compiler-libs -o custom-ocamlc
 
   # Configure the OCaml build system (to use our install dir, for example)
   redirect_to_logfile ./configure $OCAML_BUILD_CONFIG
@@ -235,24 +242,24 @@ build_ocamlc()
     driver/maindriver.ml"
 
   info "Building compilerlibs/ocamlcommon.cma... (may take a while)"
-  ocamlc \
+  ocamlc_v1 \
     $OCAMLC_FLAGS -a -linkall $INCLUDE -I stdlib \
     $ocamlcommon_SOURCES \
     -o compilerlibs/ocamlcommon.cma
 
   info "Building compilerlibs/ocamlbytecomp.cma..."
-  ocamlc \
+  ocamlc_v1 \
     $OCAMLC_FLAGS -a $INCLUDE \
     $ocamlbytecomp_SOURCES \
     -o compilerlibs/ocamlbytecomp.cma
 
   info "Building driver/main.cmo..."
-  ocamlc \
+  ocamlc_v1 \
     $OCAMLC_FLAGS -I stdlib -I driver \
     -c driver/main.ml
 
   info "Building ocamlc..."
-  ocamlc \
+  boot_ocamlc \
     $OCAMLC_FLAGS -compat-32 $INCLUDE \
     compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma driver/main.cmo \
     -o ocamlc
@@ -262,26 +269,26 @@ build_toplevel()
 {
   # todo: move somewhere else / eliminate?
   info "Building other toplevel .ml sources..."
-  ocamlc \
+  ocamlc_v1 \
     $OCAMLC_FLAGS $INCLUDE -I toplevel/byte \
     -c utils/config_main.ml utils/config_boot.ml toplevel/expunge.ml toplevel/topstart.ml
 
   cp toplevel/topmain.cmi toplevel/topmain.mli toplevel/byte
 
   info "Building ocamltoplevel.cma..."
-  ocamlc \
+  boot_ocamlc \
     $OCAMLC_FLAGS -linkall -a $INCLUDE -I toplevel/byte \
-    toplevel/genprintval.cmo toplevel/topcommon.cmo toplevel/byte/topeval.ml toplevel/byte/trace.cmo toplevel/toploop.cmo toplevel/topprinters.cmo toplevel/topdirs.cmo toplevel/byte/topmain.cmo \
+    toplevel/genprintval.cmo toplevel/topcommon.cmo toplevel/byte/topeval.cmo toplevel/byte/trace.cmo toplevel/toploop.cmo toplevel/topprinters.cmo toplevel/topdirs.cmo toplevel/byte/topmain.cmo \
     -o compilerlibs/ocamltoplevel.cma
 
   info "Building expunge..."
-  ocamlc \
+  boot_ocamlc \
     $OCAMLC_FLAGS $INCLUDE \
     compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma toplevel/expunge.cmo \
     -o expunge
 
   info "Building ocaml.tmp..."
-  ocamlc \
+  boot_ocamlc \
     $OCAMLC_FLAGS -linkall $INCLUDE -I toplevel/byte \
     compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma compilerlibs/ocamltoplevel.cma toplevel/topstart.cmo \
     -o ocaml.tmp
@@ -290,6 +297,8 @@ build_toplevel()
   ocamlrun expunge ocaml.tmp ocaml $PERVASIVES outcometree topprinters topdirs toploop
 
   rm -f ocaml.tmp
+
+  boot_ocamlc $OCAMLC_FLAGS $INCLUDE -c toplevel/topeval.mli
 
   cp toplevel/topeval.cmi toplevel/topeval.mli toplevel/byte
   cp toplevel/byte/trace.cmti toplevel/trace.cmti
@@ -307,11 +316,11 @@ build_otherlibs()
     cd ../..
   done
 
-  ocamlc $OCAMLC_FLAGS $INCLUDE -I otherlibs/dynlink/byte -c otherlibs/dynlink/dynlink.mli
+  boot_ocamlc $OCAMLC_FLAGS $INCLUDE -I otherlibs/dynlink/byte -c otherlibs/dynlink/dynlink.mli
 
   cp otherlibs/dynlink/dynlink.cmi otherlibs/dynlink/dynlink.mli otherlibs/dynlink/byte/
 
-  ocamlc $OCAMLC_FLAGS -a $INCLUDE -I otherlibs/dynlink/byte \
+  boot_ocamlc $OCAMLC_FLAGS -a $INCLUDE -I otherlibs/dynlink/byte \
     otherlibs/dynlink/dynlink_config.cmo otherlibs/dynlink/dynlink_types.cmo otherlibs/dynlink/dynlink_platform_intf.cmo otherlibs/dynlink/dynlink_common.cmo otherlibs/dynlink/byte/dynlink_symtable.cmo otherlibs/dynlink/byte/dynlink.cmo \
     -o otherlibs/dynlink/dynlink.cma
 }
@@ -319,61 +328,61 @@ build_otherlibs()
 build_middle_end()
 {
   info "Building compilerlibs/ocamlmiddleend.cma..."
-  ocamlc $OCAMLC_FLAGS $INCLUDE -a $ocamlmiddleend_SOURCES -o compilerlibs/ocamlmiddleend.cma
+  boot_ocamlc $OCAMLC_FLAGS $INCLUDE -a $ocamlmiddleend_SOURCES -o compilerlibs/ocamlmiddleend.cma
 }
 
 # Build various tools that come with the OCaml installation
 build_tools()
 {
   info "Building ocamldep..."
-  ocamlc \
+  boot_ocamlc \
     $OCAMLC_FLAGS $INCLUDE -compat-32 \
     compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma tools/ocamldep.cmo \
     -o tools/ocamldep
 
   info "Building stripdebug..."
-  ocamlc \
+  boot_ocamlc \
     $OCAMLC_FLAGS $INCLUDE \
     compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma tools/stripdebug.cmo \
     -o tools/stripdebug
 
   info "Building ocamlcmt..."
-  ocamlc \
+  boot_ocamlc \
     $OCAMLC_FLAGS $INCLUDE \
     compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma tools/ocamlcmt.cmo \
     -o tools/ocamlcmt
 
   info "Building ocamlobjinfo..."
-  ocamlc \
+  boot_ocamlc \
     $OCAMLC_FLAGS $INCLUDE \
-    compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma compilerlibs/ocamlmiddleend.cma tools/objinfo.ml \
+    compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma compilerlibs/ocamlmiddleend.cma tools/objinfo.cmo \
     -o tools/ocamlobjinfo
 
   info "Building ocamlcp..."
-  ocamlc \
+  boot_ocamlc \
     $OCAMLC_FLAGS $INCLUDE \
     config.cmo build_path_prefix_map.cmo format_doc.cmo misc.cmo profile.cmo warnings.cmo identifiable.cmo numbers.cmo arg_helper.cmo local_store.cmo load_path.cmo clflags.cmo terminfo.cmo location.cmo ccomp.cmo compenv.cmo main_args.cmo ocamlcp_common.cmo ocamlcp.cmo \
     -o tools/ocamlcp
 
   info "Building ocamlprof..."
-  ocamlc \
+  boot_ocamlc \
     $OCAMLC_FLAGS $INCLUDE \
     config.cmo build_path_prefix_map.cmo format_doc.cmo misc.cmo identifiable.cmo numbers.cmo arg_helper.cmo local_store.cmo load_path.cmo clflags.cmo terminfo.cmo warnings.cmo location.cmo longident.cmo docstrings.cmo syntaxerr.cmo ast_helper.cmo ast_iterator.cmo builtin_attributes.cmo camlinternalMenhirLib.cmo parser.cmo lexer.cmo pprintast.cmo parse.cmo ocamlprof.cmo \
     -o tools/ocamlprof
 
   info "Building ocamlmklib..."
-  ocamlc \
+  boot_ocamlc \
     $OCAMLC_FLAGS $INCLUDE \
     config.cmo build_path_prefix_map.cmo format_doc.cmo misc.cmo ocamlmklib.cmo \
     -o tools/ocamlmklib
 
   info "Building ocamlmktop..."
-  ocamlc \
+  boot_ocamlc \
     $OCAMLC_FLAGS $INCLUDE \
     config.cmo build_path_prefix_map.cmo format_doc.cmo misc.cmo identifiable.cmo numbers.cmo arg_helper.cmo local_store.cmo load_path.cmo clflags.cmo profile.cmo ccomp.cmo ocamlmktop.cmo \
     -o tools/ocamlmktop
 
-  ocamlc $OCAMLC_FLAGS $INCLUDE -c tools/profiling.ml
+  boot_ocamlc $OCAMLC_FLAGS $INCLUDE -c tools/profiling.ml
 }
 
 main()
