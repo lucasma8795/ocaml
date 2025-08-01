@@ -47,7 +47,7 @@ let get_path_list () =
   Misc.rev_map_end Dir.path !visible_dirs (List.rev_map Dir.path !hidden_dirs)
 
 let auto_include_libs libs alert find_in_dir fn =
-  Printf.eprintf "[Load_path:auto_include] (entering with fn=%s)\n" fn;
+  Printf.eprintf "[auto_include] (entering with fn=%s)\n" fn;
   let scan (lib, lazy dir) =
     let file = find_in_dir dir fn in
     let alert_and_add_dir _ =
@@ -60,7 +60,7 @@ let auto_include_libs libs alert find_in_dir fn =
   match List.find_map scan libs with
   | Some base -> base
   | None -> begin
-    Printf.eprintf "[Load_path:auto_include] failed, aborting (fn=%s)\n" fn;
+    Printf.eprintf "[auto_include] failed, aborting (fn=%s)\n" fn;
     raise Not_found;
   end
 
@@ -74,10 +74,10 @@ let auto_include_otherlibs : (string -> unit) -> Load_path.auto_include_callback
 
 let auto_include find_in_dir fn =
   if !Clflags.no_std_include then begin
-    Printf.eprintf "[Load_path:auto_include] Clflags.no_std_include is true, abort \n";
+    Printf.eprintf "[auto_include] Clflags.no_std_include is true, abort \n";
     raise Not_found
   end else begin
-    Printf.eprintf "[Load_path:auto_include] Clflags.no_std_include is false, continue\n";
+    Printf.eprintf "[auto_include] Clflags.no_std_include is false, continue\n";
     let alert = Location.auto_include_alert in
     auto_include_otherlibs alert find_in_dir fn
   end
@@ -106,7 +106,7 @@ let handle f =
       (* find : string -> string *)
       | Load_path.Find_path fn ->
         Some (fun (k: (c, _) continuation) ->
-          Printf.eprintf "[Load_path:Find_path] %s\n" fn;
+          Printf.eprintf "[Find_path] %s\n" fn;
           try
             let ret =
               try
@@ -115,7 +115,7 @@ let handle f =
                 else
                   Misc.find_in_path (get_path_list ()) fn
               with Not_found -> begin
-                Printf.eprintf "[Load_path:Find_path] attempt to auto-include %s\n" fn;
+                Printf.eprintf "[Find_path] attempt to auto-include %s\n" fn;
                 auto_include Dir.find fn
               end
             in
@@ -123,14 +123,14 @@ let handle f =
 
           with Not_found ->
             (* just give up at this point *)
-            Printf.eprintf "[Load_path:Find_path] discontinuing (fn = %s)\n" fn;
+            Printf.eprintf "[Find_path] discontinuing (fn = %s)\n" fn;
             Effect.Deep.discontinue k Not_found
         )
 
       (* find_normalized_with_visibility : string -> string * visibility *)
       | Load_path.Find_normalized_with_visibility fn ->
         Some (fun (k: (c, _) continuation) ->
-          Printf.eprintf "[Load_path:Find_normalized_with_visibility] %s\n" fn;
+          Printf.eprintf "[Find_normalized_with_visibility] %s\n" fn;
           match Misc.normalized_unit_filename fn with
           | Error _ -> raise Not_found
           | Ok fn_uncap ->
@@ -147,7 +147,7 @@ let handle f =
                     | Not_found ->
                       (Misc.find_in_path_normalized (get_hidden_path_list ()) fn, Load_path.Hidden)
                 with Not_found -> begin
-                  Printf.eprintf "[Load_path:Find_normalized_with_visibility] attempt to auto-include %s\n" fn;
+                  Printf.eprintf "[Find_normalized_with_visibility] attempt to auto-include %s\n" fn;
                   auto_include Dir.find_normalized fn_uncap, Load_path.Visible
                 end
               in
@@ -155,7 +155,7 @@ let handle f =
 
             with Not_found ->
               (* just give up at this point *)
-              Printf.eprintf "[Load_path:Find_normalized_with_visibility] discontinuing (fn = %s)\n" fn;
+              Printf.eprintf "[Find_normalized_with_visibility] discontinuing (fn = %s)\n" fn;
               Effect.Deep.discontinue k Not_found
         )
 
@@ -220,9 +220,9 @@ let handle f =
           List.iter prepend_add !hidden_dirs;
           List.iter prepend_add !visible_dirs;
 
-          Printf.eprintf "[Load_path:Init_path] visible_dirs: %s\n"
+          Printf.eprintf "[Init_path] visible_dirs: %s\n"
             (String.concat ", " (List.map Dir.path !visible_dirs));
-          Printf.eprintf "[Load_path:Init_path] hidden_dirs: %s\n"
+          Printf.eprintf "[Init_path] hidden_dirs: %s\n"
             (String.concat ", " (List.map Dir.path !hidden_dirs));
 
           Effect.Deep.continue k ();

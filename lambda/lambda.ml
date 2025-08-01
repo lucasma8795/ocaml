@@ -708,8 +708,6 @@ let rec transl_address loc = function
                    [transl_address loc addr], loc)
 
 let transl_path find loc env path =
-  Printf.eprintf "[lambda:transl_path]\n%!";
-  Env.debug env;
   match find path env with
   | exception Not_found ->
       fatal_error ("Cannot find address for: " ^ (Path.name path))

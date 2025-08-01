@@ -54,7 +54,7 @@ type address =
 
 type t
 
-val debug : t -> unit
+(* val debug : t -> unit *)
 
 val empty: t
 val initial: t

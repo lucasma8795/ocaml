@@ -342,10 +342,7 @@ module IdTbl =
 
       | Nothing
 
-    let debug tbl =
-      Printf.eprintf "[ident:debug_tbl] entering\n%!";
-      Ident.debug_tbl tbl.current;
-      Printf.eprintf "[ident:debug_tbl] done!\n%!"
+    (* let debug tbl = Ident.debug_tbl tbl.current; *)
 
     let empty = { current = Ident.empty; layer = Nothing }
 
@@ -626,7 +623,7 @@ and cltype_data =
   { cltda_declaration : class_type_declaration;
     cltda_shape : Shape.t }
 
-let debug env = IdTbl.debug env.values
+(* let debug env = IdTbl.debug env.values *)
 
 let empty_structure =
   Structure_comps {
@@ -850,15 +847,12 @@ let get_current_unit = Current_unit.get
 let get_current_unit_name = Current_unit.Name.get
 
 let find_same_module id tbl =
-  Printf.eprintf "[Env:find_same_module] id=%s\n%!" (Ident.name id);
   match IdTbl.find_same id tbl with
   | x -> x
   | exception Not_found
     when Ident.persistent id && not (Current_unit.Name.is_ident id) ->
       Mod_persistent
-  | exception Not_found ->
-    Printf.eprintf "[Env:find_same_module] bad! (id=%s)\n%!" (Ident.name id);
-    raise Not_found
+  | exception Not_found -> raise Not_found
 
 let find_name_module ~mark name tbl =
   match IdTbl.find_name wrap_module ~mark name tbl with
@@ -973,7 +967,6 @@ let read_pers_mod cmi =
   Persistent_env.read !persistent_env read_sign_of_cmi cmi
 
 let find_pers_mod name =
-  (* Printf.eprintf "[Env:find_pers_mod] name=%s\n%!" name; *)
   Persistent_env.find !persistent_env read_sign_of_cmi name
 
 let check_pers_mod ~loc name =
@@ -1058,40 +1051,27 @@ let check_functor_appl
 
 let find_ident_module id env =
   match find_same_module id env.modules with
-  | Mod_local data ->
-    Printf.eprintf "[Env:find_ident_module] Mod_local (id=%s)\n%!" (Ident.to_string id);
-    data
-  | Mod_unbound _ ->
-    Printf.eprintf "[Env:find_ident_module] (bad!) Mod_unbound, with id=%s\n%!" (Ident.to_string id);
-    raise Not_found
-  | Mod_persistent ->
-    Printf.eprintf "[Env:find_ident_module] Mod_persistent, with id=%s\n%!" (Ident.to_string id);
-    find_pers_mod ~allow_hidden:true (Ident.name id)
+  | Mod_local data -> data
+  | Mod_unbound _ -> raise Not_found
+  | Mod_persistent -> find_pers_mod ~allow_hidden:true (Ident.name id)
 
 let rec find_module_components path env =
   match path with
-  | Pident id ->
-    Printf.eprintf "[Env:find_module_components] Pident (id=%s)\n%!" (Ident.to_string id);
-    (find_ident_module id env).mda_components
+  | Pident id -> (find_ident_module id env).mda_components
   | Pdot(p, s) ->
-      Printf.eprintf "[Env:find_module_components] %s\n%!" (Path.name path);
       let sc = find_structure_components p env in
-      NameMap.iter (fun s _ -> Printf.eprintf "-- %s\n%!" s) sc.comp_modules;
       (NameMap.find s sc.comp_modules).mda_components
   | Papply(f_path, arg) ->
-      Printf.eprintf "[Env:find_module_components] Papply\n%!";
       let f_comp = find_functor_components f_path env in
       let loc = Location.(in_file !input_name) in
       !components_of_functor_appl' ~loc ~f_path ~f_comp ~arg env
   | Pextra_ty _ ->
-    Printf.eprintf "[Env:find_module_components] (bad!) Pextra_ty\n%!";
     raise Not_found
 
 and find_structure_components path env =
-  Printf.eprintf "[Env:find_structure_components] %s\n%!" (Path.name path);
   match get_components (find_module_components path env) with
-  | Structure_comps c -> Printf.eprintf "[Env:find_structure_components] Structure_comps (c=???)\n%!"; c
-  | Functor_comps _ -> Printf.eprintf "[Env:find_structure_components] (bad!) Functor_comps\n%!"; raise Not_found
+  | Structure_comps c -> c
+  | Functor_comps _ -> raise Not_found
 
 and find_functor_components path env =
   match get_components (find_module_components path env) with
@@ -1114,9 +1094,7 @@ let find_module ~alias path env =
   | Pextra_ty _ -> raise Not_found
 
 let find_module_lazy ~alias path env =
-  Printf.eprintf "[Env:find_module_lazy]\n%!";
-  debug env;
- ( match path with
+  match path with
   | Pident id ->
       let data = find_ident_module id env in
       data.mda_declaration
@@ -1131,7 +1109,7 @@ let find_module_lazy ~alias path env =
         else md (modtype_of_functor_appl fc p1 p2)
       in
       Subst.Lazy.of_module_decl md
-  | Pextra_ty _ -> raise Not_found)
+  | Pextra_ty _ -> raise Not_found
 
 let find_strengthened_module ~aliasable path env =
   let md = find_module_lazy ~alias:true path env in
@@ -1141,23 +1119,16 @@ let find_strengthened_module ~aliasable path env =
 let find_value_full path env =
   match path with
   | Pident id -> begin
-      Printf.eprintf "[Env:find_value_full] Pident (id=%s)\n%!" (Ident.to_string id);
       match IdTbl.find_same id env.values with
       | Val_bound data -> data
       | Val_unbound _ -> raise Not_found
     end
   | Pdot(p, s) ->
-      Printf.eprintf "[Env:find_value_full] Pdot (p=%s, s=%s)\n%!" (Path.name p) s;
       let sc = find_structure_components p env in
       NameMap.find s sc.comp_values
 
-  | Papply _ ->
-    Printf.eprintf "[Env:find_value_full] (bad!) Papply\n%!";
-    raise Not_found
-
-  | Pextra_ty _ ->
-    Printf.eprintf "[Env:find_value_full] (bad!) Pextra_ty\n%!";
-    raise Not_found
+  | Papply _
+  | Pextra_ty _ -> raise Not_found
 
 let find_extension_full path env =
   match path with
@@ -1283,7 +1254,6 @@ and get_address a =
   Lazy_backtrack.force force_address a
 
 let find_value_address path env =
-  Printf.eprintf "[Env:find_value_address] %s\n%!" (Path.name path);
   get_address (find_value_full path env).vda_address
 
 let find_class_address path env =
@@ -1874,10 +1844,6 @@ let rec components_of_module_maker
             in
             c.comp_modules <-
               NameMap.add (Ident.name id) mda c.comp_modules;
-            Printf.eprintf "[Env:find_module_components/SigL_module] %s\n%!" (Path.name cm_path);
-            NameMap.iter (fun name _ ->
-              Printf.eprintf "-- %s\n%!" name
-            ) c.comp_modules;
             env :=
               store_module ~update_summary:false ~check:None
                 id addr pres md shape !env

@@ -224,12 +224,12 @@ let empty = Empty
  *   | Node(_,_,_,h) -> h
  *)
 
-let rec debug_tbl = function
+(* let rec debug_tbl = function
   | Empty -> ()
   | Node (l, k, r, _) ->
       Printf.eprintf "[ident:debug_tbl] %s\n%!" (unique_name k.ident);
       debug_tbl l;
-      debug_tbl r
+      debug_tbl r *)
 
 let mknode l d r =
   let hl = match l with Empty -> 0 | Node(_,_,_,h) -> h

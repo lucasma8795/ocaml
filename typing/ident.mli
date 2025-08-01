@@ -101,7 +101,7 @@ type 'a tbl
    unique identifiers.
 *)
 
-val debug_tbl: 'a tbl -> unit
+(* val debug_tbl: 'a tbl -> unit *)
 
 val empty: 'a tbl
 val add: t -> 'a -> 'a tbl -> 'a tbl
