@@ -53,7 +53,7 @@ let get_path_list () =
   Misc.rev_map_end Dir.path !visible_dirs acc
 
 let auto_include_libs libs alert find_in_dir fn =
-  Printf.eprintf ">> [Load_path:auto_include] (entering with fn=%s)\n" fn;
+  Printf.eprintf ">> [auto_include] (entering with fn=%s)\n" fn;
   let scan (lib, lazy dir) =
     let file = find_in_dir dir fn in
     let alert_and_add_dir _ =
@@ -66,7 +66,7 @@ let auto_include_libs libs alert find_in_dir fn =
   match List.find_map scan libs with
   | Some base -> base
   | None -> begin
-    Printf.eprintf ">> [Load_path:auto_include] failed, aborting (fn=%s)\n" fn;
+    Printf.eprintf ">> [auto_include] failed, aborting (fn=%s)\n" fn;
     raise Not_found;
   end
 
@@ -285,7 +285,7 @@ let handle f =
       (* find : string -> string *)
       | Load_path.Find_path fn ->
         Some (fun (k: (c, _) continuation) ->
-          Printf.eprintf ">> [Load_path:Find_path] %s\n" fn;
+          Printf.eprintf ">> [Find_path] %s\n" fn;
           try
             let ret = find_path fn in
             (* great! nothing wrong *)
@@ -307,7 +307,7 @@ let handle f =
       (* find_normalized_with_visibility : string -> string * visibility *)
       | Load_path.Find_normalized_with_visibility fn ->
         Some (fun (k: (c, _) continuation) ->
-          Printf.eprintf ">> [Load_path:Find_normalized_with_visibility] %s\n" fn;
+          Printf.eprintf ">> [Find_normalized_with_visibility] %s\n" fn;
           try
             Effect.Deep.continue k (find_normalized_with_visibility fn)
           with Not_found -> begin
@@ -384,9 +384,9 @@ let handle f =
           List.iter prepend_add !hidden_dirs;
           List.iter prepend_add !visible_dirs;
 
-          (* Printf.eprintf ">> [Load_path:Init_path] visible_dirs: %s\n"
+          (* Printf.eprintf ">> [Init_path] visible_dirs: %s\n"
             (String.concat ", " (List.map (fun d -> Dir.path d) !visible_dirs));
-          Printf.eprintf ">> [Load_path:Init_path] hidden_dirs: %s\n"
+          Printf.eprintf ">> [Init_path] hidden_dirs: %s\n"
             (String.concat ", " (List.map (fun d -> Dir.path d) !hidden_dirs)); *)
 
           Effect.Deep.continue k ();

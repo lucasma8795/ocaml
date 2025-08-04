@@ -1,1 +1,1 @@
-let baz = [1; 2; 3; 4; 5]
+let baz = List.map D.qux [0; 1; 2; 3; 4]
