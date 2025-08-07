@@ -340,3 +340,4 @@ ocamlobjinfo
 install
 v1
 custom-ocamlc
+out
