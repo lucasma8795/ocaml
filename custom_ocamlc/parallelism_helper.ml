@@ -66,7 +66,19 @@ let rec await p =
   match Atomic.get p with
   | Pending -> Domain.cpu_relax (); await p
   | Resolved v -> v
-  | Rejected exn -> raise exn
+  | Rejected exn -> begin
+    Printf.eprintf "[await] promise rejected with exception: %s\n" (Printexc.to_string exn);
+    raise exn
+  end
+
+let try_resolve p =
+  match Atomic.get p with
+  | Pending -> None
+  | Resolved v -> Some v
+  | Rejected exn -> begin
+    Printf.eprintf "[try_resolve] promise rejected with exception: %s\n" (Printexc.to_string exn);
+    raise exn
+  end
 
 module Pool = struct
   type pool_data = {

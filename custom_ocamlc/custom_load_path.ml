@@ -103,6 +103,7 @@ let prepend_add dir =
   ) (Dir.files dir)
 
 let reset () =
+  Printf.eprintf "[Reset_path] resetting load path state\n%!";
   STbl.clear !hidden_files;
   STbl.clear !hidden_files_uncap;
   STbl.clear !visible_files;
@@ -111,17 +112,32 @@ let reset () =
   visible_dirs := []
 
 let init ~visible ~hidden =
+  Printf.eprintf "[Init_path] initializing load path state with %d visible and %d hidden dirs\n%!"
+    (List.length visible) (List.length hidden);
+
   let visible = List.filter (fun p -> not (String.ends_with ~suffix:"v1/lib/ocaml" p)) visible in
   let hidden = List.filter (fun p -> not (String.ends_with ~suffix:"v1/lib/ocaml" p)) hidden in
-  visible_dirs := List.rev_map (fun path -> Dir.create ~hidden:false path) visible;
-  hidden_dirs := List.rev_map (fun path -> Dir.create ~hidden:true path) hidden;
-  List.iter prepend_add !hidden_dirs;
-  List.iter prepend_add !visible_dirs
 
-  (* Printf.eprintf "[Init_path] visible_dirs: %s\n"
-    (String.concat ", " (List.map (fun d -> Dir.path d) !visible_dirs));
-  Printf.eprintf "[Init_path] hidden_dirs: %s\n"
-    (String.concat ", " (List.map (fun d -> Dir.path d) !hidden_dirs)) *)
+  Printf.eprintf "[Init_path] visible_dirs/0: %s\n"
+    (String.concat ", " visible);
+  Printf.eprintf "[Init_path] hidden_dirs/0: %s\n"
+    (String.concat ", " hidden);
+
+  try
+    Printf.eprintf "[Init_path] creating directories...\n";
+    visible_dirs := List.rev_map (fun path -> Dir.create ~hidden:false path) visible;
+    hidden_dirs := List.rev_map (fun path -> Dir.create ~hidden:true path) hidden;
+    Printf.eprintf "[Init_path] prepend_add...\n";
+    List.iter prepend_add !hidden_dirs;
+    List.iter prepend_add !visible_dirs;
+
+    Printf.eprintf "[Init_path] visible_dirs: %s\n"
+      (String.concat ", " (List.map (fun d -> Dir.path d) !visible_dirs));
+    Printf.eprintf "[Init_path] hidden_dirs: %s\n"
+      (String.concat ", " (List.map (fun d -> Dir.path d) !hidden_dirs))
+  with e ->
+    Printf.eprintf "[Init_path] failed to initialize load path state: %s\n" (Printexc.to_string e);
+    raise e
 
 let find fn =
   try
@@ -160,7 +176,8 @@ let find_normalized_with_visibility fn =
 let find_normalized fn = fst (find_normalized_with_visibility fn)
 
 let add_new_file_to_path dirname base =
-  Printf.eprintf "[add_new_file_to_path] adding dirname=%s base=%s to global state\n" dirname base;
+  (* add the file to the directory *)
+  Printf.eprintf "* [add_new_file_to_path] adding dirname=%s base=%s to global state\n" dirname base;
   let dir = List.find (fun d -> Dir.path d = dirname) !visible_dirs in
 
   let base_uncap = Misc.normalized_unit_filename base in
@@ -172,7 +189,6 @@ let add_new_file_to_path dirname base =
   let full_fn = Filename.concat dirname base in
   let full_fn_uncap = Filename.concat dirname base_uncap in
 
-  (* update the global state *)
   if Dir.hidden dir then begin
     STbl.replace !hidden_files_uncap base_uncap full_fn_uncap;
     STbl.replace !hidden_files base full_fn

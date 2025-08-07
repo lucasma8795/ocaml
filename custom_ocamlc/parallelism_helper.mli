@@ -25,6 +25,10 @@ val await : 'a promise -> 'a
     returning the value if it was resolved, or re-raising the wrapped exception
     if it was rejected. *)
 
+val try_resolve : 'a promise -> 'a option
+(** [try_resolve p] returns [Some x] if it was resolved with value [x], or [None]
+    if it has not been resolved. Re-raises the exception if it was rejected. *)
+
 module TSQueue : sig
   type 'a t
   (** Type of a thread-safe queue. *)

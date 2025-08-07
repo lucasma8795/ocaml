@@ -195,7 +195,6 @@ comp_SOURCES = \
   bytecomp/symtable.mli bytecomp/symtable.ml \
   driver/pparse.mli driver/pparse.ml \
   driver/handler_common.mli driver/handler_common.ml \
-  driver/parallelism.mli driver/parallelism.ml \
   driver/compenv.mli driver/compenv.ml \
   driver/main_args.mli driver/main_args.ml \
   driver/compmisc.mli driver/compmisc.ml \
@@ -2369,7 +2368,6 @@ ocamlcp_ocamloptp_SOURCES = \
   terminfo.mli terminfo.ml \
   location.mli location.ml \
   ccomp.mli ccomp.ml \
-  parallelism.mli parallelism.ml \
   driver/handler_common.mli driver/handler_common.ml \
   compenv.mli compenv.ml \
   main_args.mli main_args.ml \

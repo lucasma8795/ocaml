@@ -3,6 +3,32 @@ open Parallelism
 
 module Options = Main_args.Make_bytecomp_options (Main_args.Default.Main)
 
+let with_info ~dump_ext unit_info k =
+  (* Compmisc.init_path (); *)
+  Env.set_current_unit unit_info ;
+  let env = Compmisc.initial_env() in
+  let dump_file = String.concat "." [Unit_info.prefix unit_info; dump_ext] in
+  Compmisc.with_ppf_dump ~file_prefix:dump_file @@ fun ppf_dump ->
+  k Compile_common.{
+    target = unit_info;
+    env;
+    ppf_dump;
+    tool_name = "ocamlc";
+    native = false;
+  }
+
+let implementation ~start_from ~source_file ~output_prefix =
+  let backend info typed =
+    let bytecode = Compile.to_bytecode info typed in
+    Compile.emit_bytecode info bytecode
+  in
+  let unit_info = Unit_info.make ~source_file Impl output_prefix in
+  with_info ~dump_ext:"cmo" unit_info @@ fun info ->
+  match (start_from : Clflags.Compiler_pass.t) with
+  | Parsing -> Compile_common.implementation info ~backend
+  | _ -> Misc.fatal_errorf "Cannot start from %s"
+           (Clflags.Compiler_pass.to_string start_from)
+
 let process_deferred_actions env =
   let final_output_name = !Clflags.output_name in
   (* Make sure the intermediate products don't clash with the final one
@@ -32,12 +58,28 @@ let process_deferred_actions env =
     Compenv.fatal "No input files";
 
   (* start all compilations *)
-  let files_to_compile = List.rev_map (function
-    | Compenv.ProcessImplementation ml_file -> ml_file
-    | _ -> failwith "unexpected action"
-  ) !Compenv.deferred_actions
+  let files_to_compile = List.rev (List.filter_map (function
+    | Compenv.ProcessImplementation ml_file -> Some ml_file
+
+    | Compenv.ProcessInterface name ->
+        raise (Arg.Bad(Printf.sprintf "[process_deferred_actions] don't know what to do with ProcessInterface (name=%s)\n%!" name))
+
+    | Compenv.ProcessCFile name ->
+        raise (Arg.Bad(Printf.sprintf "[process_deferred_actions] don't know what to do with ProcessCFile (name=%s)\n%!" name))
+
+    | Compenv.ProcessObjects names ->
+        raise (Arg.Bad(Printf.sprintf "[process_deferred_actions] don't know what to do with ProcessObjects (names=%s)\n%!" (String.concat ", " names)))
+
+    | Compenv.ProcessDLLs names ->
+        raise (Arg.Bad(Printf.sprintf "[process_deferred_actions] don't know what to do with ProcessDLLs (names=%s)\n%!" (String.concat ", " names)))
+
+    | Compenv.ProcessOtherFile name ->
+        raise (Arg.Bad(Printf.sprintf "[process_deferred_actions] don't know what to do with ProcessOtherFile (name=%s)\n%!" name))
+
+  ) !Compenv.deferred_actions)
   in
   compile_ml_files env files_to_compile;
+
   Printf.eprintf "[process_deferred_actions] all done! exiting...\n%!";
 
   Clflags.output_name := final_output_name;
@@ -64,7 +106,7 @@ let main argv ppf =
     begin try
       process_deferred_actions Compenv.{
         log = ppf;
-        compile_implementation = Compile.implementation;
+        compile_implementation = implementation;
         compile_interface = Compile.interface;
         ocaml_mod_ext = ".cmo";
         ocaml_lib_ext = ".cma";

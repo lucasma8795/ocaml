@@ -1,6 +1,7 @@
 open Effect.Deep
 open Clflags
 open Custom_load_path
+open Parallelism_helper
 
 type pid = int
 type filename = string
@@ -21,7 +22,7 @@ type suspended_compilation = {
 
 (* Represents the state of a process currently under parallel compilation *)
 type compilation_state = {
-  pid : pid;
+  promise : int promise; (* exit code *)
   waiting_tasks : suspended_compilation list ref;
 }
 
@@ -44,6 +45,7 @@ let resolve_source_fullname cmi_file ~normalize =
   mli_fullname
 
 let compile_implementation ctx impl_filename =
+  Printf.eprintf "[compile_implementation] entering (file=%s)\n" impl_filename;
   let Compenv.{
     log = ppf;
     compile_implementation;
@@ -54,16 +56,16 @@ let compile_implementation ctx impl_filename =
   let impl ~start_from name =
     Compenv.readenv ppf (Before_compile name);
     let opref = Compenv.output_prefix name in
-    compile_implementation ~start_from ~source_file:name ~output_prefix:opref;
-    objfiles := (opref ^ ocaml_mod_ext) :: !objfiles
+    objfiles := (opref ^ ocaml_mod_ext) :: !objfiles;
+   compile_implementation ~start_from ~source_file:name ~output_prefix:opref
   in
   impl ~start_from:Compiler_pass.Parsing impl_filename;
   Printf.eprintf "[compile_implementation] finished compiling %s!\n" impl_filename
 
 (* Takes in a resolved .mli filename, compiles it in a separate process,
    then returns the pid of the process that is compiling it *)
-let compile_dependency_parallel mli_fullname =
-  Printf.eprintf "[compile_dependency] entering (file=%s)\n" mli_fullname;
+let compile_dependency mli_fullname =
+  Printf.eprintf "* [compile_dependency] entering (file=%s)\n" mli_fullname;
   assert (Filename.check_suffix mli_fullname ".mli");
 
   try
@@ -81,23 +83,33 @@ let compile_dependency_parallel mli_fullname =
        "-warn-error"; "+a"; "-bin-annot"; "-strict-formats"] @ load_path_args
     in
 
-    Printf.eprintf "[Unix.create_process] %s %s\n" prog (String.concat " " args);
-    let args = Array.of_list (prog :: args) in
-    let pid : pid = Unix.create_process prog args Unix.stdin Unix.stdout Unix.stderr in
-    pid
+    (* compile the .mli file *)
+    Printf.eprintf "* [Sys.command] %s %s\n" prog (String.concat " " args);
+
+    let cmd = Filename.quote_command prog args in
+    let exit_code = Sys.command cmd in
+    let cmi_fullname = (Filename.chop_suffix mli_fullname ".mli") ^ ".cmi" in
+    add_new_file_to_path (Filename.dirname cmi_fullname) (Filename.basename cmi_fullname);
+    exit_code
 
   with e -> begin
-    Printf.eprintf "[compile_dependency] failed to compile %s, giving up... \n" mli_fullname;
+    Printf.eprintf "* [compile_dependency] failed to compile %s, giving up... \n" mli_fullname;
     raise Not_found
   end
 
 let compile_ml_files env ml_files =
+  Compmisc.init_path ();
+
+  let pool = Pool.create 8 in
   List.iter (fun ml_file ->
+    (* resolve source fullname *)
+    let ml_fullname = find ml_file in
+
     (* this holds the compilation's global state *)
-    let store = Local_store.fresh ml_file in
+    let store = Local_store.fresh ml_fullname in
     let compile () =
       let handle_not_found cmi_file resume k ~normalize =
-        Printf.eprintf "[compile_ml_files] %s depends on %s but it is not found!\n" ml_file cmi_file;
+        Printf.eprintf "[compile_ml_files] %s depends on %s but it is not found!\n" ml_fullname cmi_file;
 
         (* resolve source file *)
         let mli_fullname = resolve_source_fullname cmi_file ~normalize in
@@ -114,18 +126,19 @@ let compile_ml_files env ml_files =
           | None ->
             (* there is no process compiling the interface *)
             Printf.eprintf "[compile_ml_files] there is no process compiling %s! starting one...\n" cmi_fullname;
-            let pid = compile_dependency_parallel mli_fullname in
+            let promise = Pool.submit pool (fun () -> compile_dependency mli_fullname) in
+
             Hashtbl.add compiling cmi_fullname {
-              pid;
+              promise;
               waiting_tasks = ref [{ store; continuation = k }]
             }
 
-          | Some { pid; waiting_tasks } -> (* this file is already being compiled *)
-            Printf.eprintf "[compile_ml_files] %s is already being compiled (pid=%d)! adding continuation to list...\n" cmi_fullname pid;
+          | Some { promise; waiting_tasks } -> (* this file is already being compiled *)
+            Printf.eprintf "[compile_ml_files] %s is already being compiled! adding continuation to list...\n" cmi_fullname;
             waiting_tasks := { store; continuation = k } :: !waiting_tasks
           end
       in
-      match compile_implementation env ml_file with
+      match compile_implementation env ml_fullname with
       | () -> ()
       | effect (Load_path.Find_path cmi_file), k ->
         begin
@@ -147,6 +160,10 @@ let compile_ml_files env ml_files =
             let resume fn = continue k (fn, Load_path.Visible) in
             handle_not_found cmi_file resume (Find_with_visibility k) ~normalize:true
         end
+
+      | exception exn ->
+        Printf.eprintf "[compile_ml_files] fatal error: exception while compiling %s: %s\n" ml_fullname (Printexc.to_string exn);
+        raise exn
     in
     Local_store.with_store store compile
   ) ml_files;
@@ -154,11 +171,11 @@ let compile_ml_files env ml_files =
   (* wait for all compilations to finish *)
   let rec wait_for_compilations () =
     let to_remove = ref [] in
-    Hashtbl.iter (fun cmi_fullname { pid; waiting_tasks } ->
-      match Unix.waitpid [Unix.WNOHANG] pid with
-      | (0, _) -> () (* process is still running *)
+    Hashtbl.iter (fun cmi_fullname { promise; waiting_tasks } ->
+      match try_resolve promise with
+      | None -> () (* process is still running *)
 
-      | (_, Unix.WEXITED 0) -> (* resume all continuations for this process *)
+      | Some 0 -> (* resume all continuations for this process *)
         Printf.eprintf "[compile_ml_files] %s compiled successfully! resuming %d suspended compilations waiting on it... \n" cmi_fullname (List.length !waiting_tasks);
         List.iter (fun { store; continuation } ->
           Local_store.with_store store (fun () ->
@@ -170,14 +187,12 @@ let compile_ml_files env ml_files =
         ) !waiting_tasks;
         to_remove := cmi_fullname :: !to_remove
 
-      | (_, Unix.WEXITED code) ->
-        Printf.eprintf "[compile_ml_files] compilation of %s failed with exit code %d\n" cmi_fullname code;
+      | Some exit_code ->
+        Printf.eprintf "[compile_ml_files] compilation of %s failed with abnormal exit code %d\n" cmi_fullname exit_code;
         exit 1
-      | (_, Unix.WSIGNALED signal) ->
-        Printf.eprintf "[compile_ml_files] compilation of %s was killed by signal %d\n" cmi_fullname signal;
-        exit 1
-      | (_, Unix.WSTOPPED signal) ->
-        Printf.eprintf "[compile_ml_files] compilation of %s was stopped by signal %d\n" cmi_fullname signal;
+
+      | exception exn ->
+        Printf.eprintf "[compile_ml_files] compilation of %s failed with exception: %s\n" cmi_fullname (Printexc.to_string exn);
         exit 1
 
     ) compiling;
