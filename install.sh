@@ -21,7 +21,7 @@ readonly BOOT_DIR="${BUILD_ROOT}/boot"
 readonly OCAML_BUILD_CONFIG="--prefix=${INSTALL_DIR} --disable-native-compiler --disable-ocamldoc --disable-debugger"
 
 # compiler args that are common to every invocation (?)
-readonly INCLUDE="-I ./boot -I utils -I parsing -I typing -I bytecomp -I file_formats -I lambda -I middle_end -I middle_end/closure -I middle_end/flambda -I middle_end/flambda/base_types -I asmcomp -I driver -I toplevel -I tools -I runtime -I otherlibs/dynlink -I otherlibs/str -I otherlibs/systhreads -I otherlibs/unix -I otherlibs/runtime_events"
+readonly INCLUDE="-I boot -I utils -I parsing -I typing -I bytecomp -I file_formats -I lambda -I middle_end -I middle_end/closure -I middle_end/flambda -I middle_end/flambda/base_types -I asmcomp -I driver -I toplevel -I tools -I runtime -I otherlibs/dynlink -I otherlibs/str -I otherlibs/systhreads -I otherlibs/unix -I otherlibs/runtime_events"
 
 readonly OCAMLC_FLAGS="-nostdlib -use-prims runtime/primitives -g -strict-sequence -principal -absname -w +a-4-9-40-41-42-44-45-48 -warn-error -a -bin-annot -strict-formats"
 # warn-error +a
@@ -90,66 +90,66 @@ readonly comp_SOURCES="\
   driver/compmisc.ml driver/makedepend.ml driver/compile_common.ml"
 
 readonly ocamlmiddleend_SOURCES="\
-  middle_end/internal_variable_names.cmo middle_end/linkage_name.cmo \
-  middle_end/compilation_unit.cmo middle_end/variable.cmo \
-  middle_end/flambda/base_types/closure_element.cmo \
-  middle_end/flambda/base_types/closure_id.cmo middle_end/symbol.cmo \
-  middle_end/backend_var.cmo middle_end/clambda_primitives.cmo \
-  middle_end/printclambda_primitives.cmo middle_end/clambda.cmo \
-  middle_end/printclambda.cmo middle_end/semantics_of_primitives.cmo \
-  middle_end/convert_primitives.cmo middle_end/flambda/base_types/id_types.cmo \
-  middle_end/flambda/base_types/export_id.cmo \
-  middle_end/flambda/base_types/tag.cmo \
-  middle_end/flambda/base_types/mutable_variable.cmo \
-  middle_end/flambda/base_types/set_of_closures_id.cmo \
-  middle_end/flambda/base_types/set_of_closures_origin.cmo \
-  middle_end/flambda/base_types/closure_origin.cmo \
-  middle_end/flambda/base_types/var_within_closure.cmo \
-  middle_end/flambda/base_types/static_exception.cmo \
-  middle_end/flambda/pass_wrapper.cmo middle_end/flambda/allocated_const.cmo \
-  middle_end/flambda/parameter.cmo middle_end/flambda/projection.cmo \
-  middle_end/flambda/flambda.cmo middle_end/flambda/flambda_iterators.cmo \
-  middle_end/flambda/flambda_utils.cmo middle_end/flambda/freshening.cmo \
-  middle_end/flambda/effect_analysis.cmo middle_end/flambda/inlining_cost.cmo \
-  middle_end/flambda/simple_value_approx.cmo \
-  middle_end/flambda/export_info.cmo \
-  middle_end/flambda/export_info_for_pack.cmo middle_end/compilenv.cmo \
-  middle_end/closure/closure.cmo middle_end/closure/closure_middle_end.cmo \
-  middle_end/flambda/import_approx.cmo middle_end/flambda/lift_code.cmo \
-  middle_end/flambda/closure_conversion_aux.cmo \
-  middle_end/flambda/closure_conversion.cmo \
-  middle_end/flambda/initialize_symbol_to_let_symbol.cmo \
-  middle_end/flambda/lift_let_to_initialize_symbol.cmo \
-  middle_end/flambda/find_recursive_functions.cmo \
-  middle_end/flambda/invariant_params.cmo \
-  middle_end/flambda/inconstant_idents.cmo \
-  middle_end/flambda/alias_analysis.cmo middle_end/flambda/lift_constants.cmo \
-  middle_end/flambda/share_constants.cmo \
-  middle_end/flambda/simplify_common.cmo \
-  middle_end/flambda/remove_unused_arguments.cmo \
-  middle_end/flambda/remove_unused_closure_vars.cmo \
-  middle_end/flambda/remove_unused_program_constructs.cmo \
-  middle_end/flambda/simplify_boxed_integer_ops.cmo \
-  middle_end/flambda/simplify_primitives.cmo \
-  middle_end/flambda/inlining_stats_types.cmo \
-  middle_end/flambda/inlining_stats.cmo \
-  middle_end/flambda/inline_and_simplify_aux.cmo \
-  middle_end/flambda/remove_free_vars_equal_to_args.cmo \
-  middle_end/flambda/extract_projections.cmo \
-  middle_end/flambda/augment_specialised_args.cmo \
-  middle_end/flambda/unbox_free_vars_of_closures.cmo \
-  middle_end/flambda/unbox_specialised_args.cmo \
-  middle_end/flambda/unbox_closures.cmo \
-  middle_end/flambda/inlining_transforms.cmo \
-  middle_end/flambda/inlining_decision.cmo \
-  middle_end/flambda/inline_and_simplify.cmo \
-  middle_end/flambda/ref_to_variables.cmo \
-  middle_end/flambda/flambda_invariants.cmo \
-  middle_end/flambda/traverse_for_exported_symbols.cmo \
-  middle_end/flambda/build_export_info.cmo \
-  middle_end/flambda/closure_offsets.cmo \
-  middle_end/flambda/un_anf.cmo middle_end/flambda/flambda_to_clambda.cmo \
-  middle_end/flambda/flambda_middle_end.cmo"
+  middle_end/internal_variable_names.ml middle_end/linkage_name.ml \
+  middle_end/compilation_unit.ml middle_end/variable.ml \
+  middle_end/flambda/base_types/closure_element.ml \
+  middle_end/flambda/base_types/closure_id.ml middle_end/symbol.ml \
+  middle_end/backend_var.ml middle_end/clambda_primitives.ml \
+  middle_end/printclambda_primitives.ml middle_end/clambda.ml \
+  middle_end/printclambda.ml middle_end/semantics_of_primitives.ml \
+  middle_end/convert_primitives.ml middle_end/flambda/base_types/id_types.ml \
+  middle_end/flambda/base_types/export_id.ml \
+  middle_end/flambda/base_types/tag.ml \
+  middle_end/flambda/base_types/mutable_variable.ml \
+  middle_end/flambda/base_types/set_of_closures_id.ml \
+  middle_end/flambda/base_types/set_of_closures_origin.ml \
+  middle_end/flambda/base_types/closure_origin.ml \
+  middle_end/flambda/base_types/var_within_closure.ml \
+  middle_end/flambda/base_types/static_exception.ml \
+  middle_end/flambda/pass_wrapper.ml middle_end/flambda/allocated_const.ml \
+  middle_end/flambda/parameter.ml middle_end/flambda/projection.ml \
+  middle_end/flambda/flambda.ml middle_end/flambda/flambda_iterators.ml \
+  middle_end/flambda/flambda_utils.ml middle_end/flambda/freshening.ml \
+  middle_end/flambda/effect_analysis.ml middle_end/flambda/inlining_cost.ml \
+  middle_end/flambda/simple_value_approx.ml \
+  middle_end/flambda/export_info.ml \
+  middle_end/flambda/export_info_for_pack.ml middle_end/compilenv.ml \
+  middle_end/closure/closure.ml middle_end/closure/closure_middle_end.ml \
+  middle_end/flambda/import_approx.ml middle_end/flambda/lift_code.ml \
+  middle_end/flambda/closure_conversion_aux.ml \
+  middle_end/flambda/closure_conversion.ml \
+  middle_end/flambda/initialize_symbol_to_let_symbol.ml \
+  middle_end/flambda/lift_let_to_initialize_symbol.ml \
+  middle_end/flambda/find_recursive_functions.ml \
+  middle_end/flambda/invariant_params.ml \
+  middle_end/flambda/inconstant_idents.ml \
+  middle_end/flambda/alias_analysis.ml middle_end/flambda/lift_constants.ml \
+  middle_end/flambda/share_constants.ml \
+  middle_end/flambda/simplify_common.ml \
+  middle_end/flambda/remove_unused_arguments.ml \
+  middle_end/flambda/remove_unused_closure_vars.ml \
+  middle_end/flambda/remove_unused_program_constructs.ml \
+  middle_end/flambda/simplify_boxed_integer_ops.ml \
+  middle_end/flambda/simplify_primitives.ml \
+  middle_end/flambda/inlining_stats_types.ml \
+  middle_end/flambda/inlining_stats.ml \
+  middle_end/flambda/inline_and_simplify_aux.ml \
+  middle_end/flambda/remove_free_vars_equal_to_args.ml \
+  middle_end/flambda/extract_projections.ml \
+  middle_end/flambda/augment_specialised_args.ml \
+  middle_end/flambda/unbox_free_vars_of_closures.ml \
+  middle_end/flambda/unbox_specialised_args.ml \
+  middle_end/flambda/unbox_closures.ml \
+  middle_end/flambda/inlining_transforms.ml \
+  middle_end/flambda/inlining_decision.ml \
+  middle_end/flambda/inline_and_simplify.ml \
+  middle_end/flambda/ref_to_variables.ml \
+  middle_end/flambda/flambda_invariants.ml \
+  middle_end/flambda/traverse_for_exported_symbols.ml \
+  middle_end/flambda/build_export_info.ml \
+  middle_end/flambda/closure_offsets.ml \
+  middle_end/flambda/un_anf.ml middle_end/flambda/flambda_to_clambda.ml \
+  middle_end/flambda/flambda_middle_end.ml"
 
 readonly PERVASIVES="\
   camlinternalFormatBasics stdlib stdlib__Either stdlib__Sys stdlib__Obj stdlib__Type stdlib__Atomic camlinternalLazy stdlib__Lazy stdlib__Seq stdlib__Option stdlib__Pair stdlib__Result stdlib__Bool stdlib__Char stdlib__Uchar stdlib__List stdlib__Int stdlib__Array stdlib__Iarray stdlib__Bytes stdlib__String stdlib__Unit stdlib__Marshal stdlib__Float stdlib__Int32 stdlib__Int64 stdlib__Nativeint stdlib__Lexing stdlib__Parsing stdlib__Repr stdlib__Set stdlib__Map stdlib__Stack stdlib__Queue stdlib__Buffer stdlib__Mutex stdlib__Condition stdlib__Semaphore stdlib__Domain camlinternalFormat stdlib__Printf stdlib__Arg stdlib__Printexc stdlib__Fun stdlib__Gc stdlib__In_channel stdlib__Out_channel stdlib__Digest stdlib__Bigarray stdlib__Random stdlib__Hashtbl stdlib__Weak stdlib__Format stdlib__Scanf stdlib__Callback camlinternalOO stdlib__Oo camlinternalMod stdlib__Dynarray stdlib__Pqueue stdlib__Ephemeron stdlib__Filename stdlib__Complex stdlib__ArrayLabels stdlib__ListLabels stdlib__BytesLabels stdlib__StringLabels stdlib__MoreLabels stdlib__StdLabels stdlib__Effect"
@@ -287,7 +287,7 @@ build_toplevel()
   info "Building ocamltoplevel.cma..."
   boot_ocamlc \
     $OCAMLC_FLAGS -linkall -a $INCLUDE -I toplevel/byte \
-    toplevel/genprintval.cmo toplevel/topcommon.cmo toplevel/byte/topeval.cmo toplevel/byte/trace.cmo toplevel/toploop.cmo toplevel/topprinters.cmo toplevel/topdirs.cmo toplevel/byte/topmain.cmo \
+    toplevel/genprintval.ml toplevel/topcommon.ml toplevel/byte/topeval.ml toplevel/byte/trace.ml toplevel/toploop.ml toplevel/topprinters.ml toplevel/topdirs.ml toplevel/byte/topmain.ml \
     -o compilerlibs/ocamltoplevel.cma
 
   info "Building expunge..."
@@ -310,7 +310,7 @@ build_toplevel()
   boot_ocamlc $OCAMLC_FLAGS $INCLUDE -c toplevel/topeval.mli
 
   cp toplevel/topeval.cmi toplevel/topeval.mli toplevel/byte
-  cp toplevel/byte/trace.cmti toplevel/trace.cmti
+  # cp toplevel/byte/trace.cmti toplevel/trace.cmti
 }
 
 build_otherlibs()
@@ -337,7 +337,8 @@ build_otherlibs()
 build_middle_end()
 {
   info "Building compilerlibs/ocamlmiddleend.cma..."
-  boot_ocamlc $OCAMLC_FLAGS $INCLUDE -a $ocamlmiddleend_SOURCES -o compilerlibs/ocamlmiddleend.cma
+  parallel_ocamlc $OCAMLC_FLAGS $INCLUDE -a $ocamlmiddleend_SOURCES \
+    -o compilerlibs/ocamlmiddleend.cma
 }
 
 # Build various tools that come with the OCaml installation
@@ -346,25 +347,25 @@ build_tools()
   info "Building ocamldep..."
   boot_ocamlc \
     $OCAMLC_FLAGS $INCLUDE -compat-32 \
-    compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma tools/ocamldep.cmo \
+    compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma tools/ocamldep.ml \
     -o tools/ocamldep
 
   info "Building stripdebug..."
   boot_ocamlc \
     $OCAMLC_FLAGS $INCLUDE \
-    compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma tools/stripdebug.cmo \
+    compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma tools/stripdebug.ml \
     -o tools/stripdebug
 
   info "Building ocamlcmt..."
   boot_ocamlc \
     $OCAMLC_FLAGS $INCLUDE \
-    compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma tools/ocamlcmt.cmo \
+    compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma tools/ocamlcmt.ml \
     -o tools/ocamlcmt
 
   info "Building ocamlobjinfo..."
   boot_ocamlc \
     $OCAMLC_FLAGS $INCLUDE \
-    compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma compilerlibs/ocamlmiddleend.cma tools/objinfo.cmo \
+    compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma compilerlibs/ocamlmiddleend.cma tools/objinfo.ml \
     -o tools/ocamlobjinfo
 
   info "Building ocamlcp..."

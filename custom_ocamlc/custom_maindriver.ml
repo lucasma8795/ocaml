@@ -58,7 +58,7 @@ let process_deferred_actions env =
     Compenv.fatal "No input files";
 
   (* start all compilations *)
-  let files_to_compile = List.rev (List.filter_map (function
+  let files_to_compile = List.filter_map (function
     | Compenv.ProcessImplementation ml_file -> Some ml_file
 
     | Compenv.ProcessInterface name ->
@@ -76,7 +76,7 @@ let process_deferred_actions env =
     | Compenv.ProcessOtherFile name ->
         raise (Arg.Bad(Printf.sprintf "[process_deferred_actions] don't know what to do with ProcessOtherFile (name=%s)\n%!" name))
 
-  ) !Compenv.deferred_actions)
+  ) (List.rev !Compenv.deferred_actions)
   in
   compile_ml_files env files_to_compile;
 

@@ -89,7 +89,7 @@ let compile_dependency mli_fullname =
     let cmd = Filename.quote_command prog args in
     let exit_code = Sys.command cmd in
     let cmi_fullname = (Filename.chop_suffix mli_fullname ".mli") ^ ".cmi" in
-    add_new_file_to_path (Filename.dirname cmi_fullname) (Filename.basename cmi_fullname);
+    add_new_file_to_path cmi_fullname;
     exit_code
 
   with e -> begin
@@ -105,67 +105,99 @@ let compile_ml_files env ml_files =
     (* resolve source fullname *)
     let ml_fullname = find ml_file in
 
-    (* this holds the compilation's global state *)
-    let store = Local_store.fresh ml_fullname in
-    let compile () =
-      let handle_not_found cmi_file resume k ~normalize =
-        Printf.eprintf "[compile_ml_files] %s depends on %s but it is not found!\n" ml_fullname cmi_file;
+    try
+      (* this holds the compilation's global state *)
+      let store = Local_store.fresh ml_fullname in
+      let compile () =
+        let handle_not_found cmi_file resume k ~normalize =
+          Printf.eprintf "[compile_ml_files] %s depends on %s but it is not found!\n" ml_fullname cmi_file;
 
-        (* resolve source file *)
-        let mli_fullname = resolve_source_fullname cmi_file ~normalize in
-        let cmi_fullname = (Filename.chop_suffix mli_fullname ".mli") ^ ".cmi" in
-        Printf.eprintf "[compile_ml_files] %s resolved to %s\n" cmi_file cmi_fullname;
+          (* resolve source file *)
+          let mli_fullname = resolve_source_fullname cmi_file ~normalize in
+          let cmi_fullname = (Filename.chop_suffix mli_fullname ".mli") ^ ".cmi" in
+          Printf.eprintf "[compile_ml_files] %s resolved to %s\n" cmi_file cmi_fullname;
 
-        (* ensure it really isn't here *)
-        if Sys.file_exists cmi_fullname then begin
-          Printf.eprintf "[compile_ml_files] %s already exists (inconsistent load path state?)\n" cmi_fullname;
-          add_new_file_to_path (Filename.dirname cmi_fullname) (Filename.basename cmi_fullname);
-          resume cmi_fullname
-        end else
-          begin match Hashtbl.find_opt compiling cmi_fullname with
-          | None ->
-            (* there is no process compiling the interface *)
-            Printf.eprintf "[compile_ml_files] there is no process compiling %s! starting one...\n" cmi_fullname;
-            let promise = Pool.submit pool (fun () -> compile_dependency mli_fullname) in
+          (* ensure it really isn't here *)
+          if Sys.file_exists cmi_fullname then begin
+            Printf.eprintf "[compile_ml_files] %s already exists (inconsistent load path state?)\n" cmi_fullname;
+            add_new_file_to_path cmi_fullname;
+            resume cmi_fullname
 
-            Hashtbl.add compiling cmi_fullname {
-              promise;
-              waiting_tasks = ref [{ store; continuation = k }]
-            }
+          end else
+            begin match Hashtbl.find_opt compiling cmi_fullname with
+            | None ->
+              (* there is no process compiling the interface *)
+              Printf.eprintf "[compile_ml_files] there is no process compiling %s! starting one...\n" cmi_fullname;
+              let promise = Pool.submit pool (fun () -> compile_dependency mli_fullname) in
 
-          | Some { promise; waiting_tasks } -> (* this file is already being compiled *)
-            Printf.eprintf "[compile_ml_files] %s is already being compiled! adding continuation to list...\n" cmi_fullname;
-            waiting_tasks := { store; continuation = k } :: !waiting_tasks
-          end
+              Hashtbl.add compiling cmi_fullname {
+                promise;
+                waiting_tasks = ref [{ store; continuation = k }]
+              }
+
+            | Some { promise; waiting_tasks } -> (* this file is already being compiled *)
+              Printf.eprintf "[compile_ml_files] %s is already being compiled! adding continuation to list...\n" cmi_fullname;
+              waiting_tasks := { store; continuation = k } :: !waiting_tasks
+            end
+        in
+        begin match compile_implementation env ml_fullname with
+          | () -> (* return *)
+            (* update the load path with the new .cmo file *)
+            let cmo_fullname = (Filename.chop_suffix ml_fullname ".ml") ^ ".cmo" in
+            add_new_file_to_path cmo_fullname
+
+          | effect (Load_path.Find_path cmi_file), k ->
+            begin
+              assert (Filename.check_suffix cmi_file ".cmi");
+              try
+                let cmi_fullname = Custom_load_path.find cmi_file in
+
+                try
+                  continue k cmi_fullname
+                with e -> begin
+                  Printexc.print_backtrace stderr;
+                  raise e
+                end
+
+              with Not_found ->
+                let resume = continue k in
+                handle_not_found cmi_file resume (Find k) ~normalize:false
+            end
+
+          | effect (Load_path.Find_normalized_with_visibility cmi_file), k ->
+            begin
+              assert (Filename.check_suffix cmi_file ".cmi");
+
+              try
+                let (cmi_fullname, visibility) = Custom_load_path.find_normalized_with_visibility cmi_file in
+
+                try
+                  continue k (cmi_fullname, visibility)
+                with e -> begin
+                  Printexc.print_backtrace stderr;
+                  raise e
+                end
+
+              with Not_found ->
+                let resume fn = continue k (fn, Load_path.Visible) in
+                handle_not_found cmi_file resume (Find_with_visibility k) ~normalize:true
+            end
+
+          | exception exn ->
+            Printf.eprintf "[compile_ml_files] fatal error: exception while compiling %s: %s\n" ml_fullname (Printexc.to_string exn);
+            raise exn
+        end
       in
-      match compile_implementation env ml_fullname with
-      | () -> ()
-      | effect (Load_path.Find_path cmi_file), k ->
-        begin
-          assert (Filename.check_suffix cmi_file ".cmi");
-          try
-            continue k (Custom_load_path.find_normalized cmi_file)
-          with Not_found ->
-            let resume = continue k in
-            handle_not_found cmi_file resume (Find k) ~normalize:false
-        end
+      Local_store.with_store store compile
 
-      | effect (Load_path.Find_normalized_with_visibility cmi_file), k ->
-        begin
-          assert (Filename.check_suffix cmi_file ".cmi");
-          try
-            let (cmi_fullname, visibility) = Custom_load_path.find_normalized_with_visibility cmi_file in
-            continue k (cmi_fullname, visibility)
-          with Not_found ->
-            let resume fn = continue k (fn, Load_path.Visible) in
-            handle_not_found cmi_file resume (Find_with_visibility k) ~normalize:true
-        end
+    with e -> begin
+      Printf.eprintf "[compile_ml_files] Exception while compiling %s!\n%!" ml_fullname;
+      Printf.eprintf "Fatal error: %s\n%!" (Printexc.to_string e);
+      Printexc.print_backtrace stderr;
+      raise e
+    end;
 
-      | exception exn ->
-        Printf.eprintf "[compile_ml_files] fatal error: exception while compiling %s: %s\n" ml_fullname (Printexc.to_string exn);
-        raise exn
-    in
-    Local_store.with_store store compile
+    (* raise Not_found *)
   ) ml_files;
 
   (* wait for all compilations to finish *)

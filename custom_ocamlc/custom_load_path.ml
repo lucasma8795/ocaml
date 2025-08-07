@@ -118,26 +118,21 @@ let init ~visible ~hidden =
   let visible = List.filter (fun p -> not (String.ends_with ~suffix:"v1/lib/ocaml" p)) visible in
   let hidden = List.filter (fun p -> not (String.ends_with ~suffix:"v1/lib/ocaml" p)) hidden in
 
-  Printf.eprintf "[Init_path] visible_dirs/0: %s\n"
-    (String.concat ", " visible);
-  Printf.eprintf "[Init_path] hidden_dirs/0: %s\n"
-    (String.concat ", " hidden);
-
-  try
-    Printf.eprintf "[Init_path] creating directories...\n";
+  begin try
     visible_dirs := List.rev_map (fun path -> Dir.create ~hidden:false path) visible;
     hidden_dirs := List.rev_map (fun path -> Dir.create ~hidden:true path) hidden;
-    Printf.eprintf "[Init_path] prepend_add...\n";
     List.iter prepend_add !hidden_dirs;
     List.iter prepend_add !visible_dirs;
 
-    Printf.eprintf "[Init_path] visible_dirs: %s\n"
-      (String.concat ", " (List.map (fun d -> Dir.path d) !visible_dirs));
-    Printf.eprintf "[Init_path] hidden_dirs: %s\n"
-      (String.concat ", " (List.map (fun d -> Dir.path d) !hidden_dirs))
   with e ->
     Printf.eprintf "[Init_path] failed to initialize load path state: %s\n" (Printexc.to_string e);
     raise e
+  end;
+
+  Printf.eprintf "[Init_path] visible_dirs: %s\n"
+      (String.concat ", " (List.map (fun d -> Dir.path d) !visible_dirs));
+  Printf.eprintf "[Init_path] hidden_dirs: %s\n"
+    (String.concat ", " (List.map (fun d -> Dir.path d) !hidden_dirs))
 
 let find fn =
   try
@@ -175,29 +170,41 @@ let find_normalized_with_visibility fn =
 
 let find_normalized fn = fst (find_normalized_with_visibility fn)
 
-let add_new_file_to_path dirname base =
-  (* add the file to the directory *)
-  Printf.eprintf "* [add_new_file_to_path] adding dirname=%s base=%s to global state\n" dirname base;
-  let dir = List.find (fun d -> Dir.path d = dirname) !visible_dirs in
-
-  let base_uncap = Misc.normalized_unit_filename base in
-  let base_uncap = match base_uncap with
-    | Error _ -> raise Not_found
-    | Ok base_uncap -> base_uncap
-  in
-
-  let full_fn = Filename.concat dirname base in
-  let full_fn_uncap = Filename.concat dirname base_uncap in
-
-  if Dir.hidden dir then begin
-    STbl.replace !hidden_files_uncap base_uncap full_fn_uncap;
-    STbl.replace !hidden_files base full_fn
-  end else begin
-    STbl.replace !visible_files_uncap base_uncap full_fn_uncap;
-    STbl.replace !visible_files base full_fn
+let add_new_file_to_path fullname =
+  if not (Sys.file_exists fullname) then begin
+    Printf.eprintf "[add_new_file_to_path] %s does not exist, giving up...\n" fullname;
+    raise Not_found
   end;
 
-  Dir.add_file dir base;
+  (* add the file to the directory *)
+  Printf.eprintf "* [add_new_file_to_path] adding %s to global state\n" fullname;
+
+  let dirname = Filename.dirname fullname in
+  let basename = Filename.basename fullname in
+
+  let dir =
+    try
+      List.find (fun d -> Dir.path d = dirname) !visible_dirs
+    with Not_found -> begin
+      Printf.eprintf "[add_new_file_to_path] %s not found in directory list??\n" dirname;
+      raise Not_found
+    end
+  in
+
+  let basename_uncap = match Misc.normalized_unit_filename basename with
+    | Error _ -> raise Not_found
+    | Ok uncap -> uncap
+  in
+
+  if Dir.hidden dir then begin
+    STbl.replace !hidden_files_uncap basename_uncap fullname;
+    STbl.replace !hidden_files basename fullname
+  end else begin
+    STbl.replace !visible_files_uncap basename_uncap fullname;
+    STbl.replace !visible_files basename fullname
+  end;
+
+  Dir.add_file dir basename;
 
   (* sanity checks *)
-  assert (find base = full_fn)
+  assert (find basename = fullname)

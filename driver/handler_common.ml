@@ -53,7 +53,7 @@ let get_path_list () =
   Misc.rev_map_end Dir.path !visible_dirs acc
 
 let auto_include_libs libs alert find_in_dir fn =
-  Printf.eprintf ">> [auto_include] (entering with fn=%s)\n" fn;
+  Printf.eprintf ">> [handler_common/auto_include] (entering with fn=%s)\n" fn;
   let scan (lib, lazy dir) =
     let file = find_in_dir dir fn in
     let alert_and_add_dir _ =
@@ -66,7 +66,7 @@ let auto_include_libs libs alert find_in_dir fn =
   match List.find_map scan libs with
   | Some base -> base
   | None -> begin
-    Printf.eprintf ">> [auto_include] failed, aborting (fn=%s)\n" fn;
+    Printf.eprintf ">> [handler_common/auto_include] failed, aborting (fn=%s)\n" fn;
     raise Not_found;
   end
 
@@ -80,10 +80,10 @@ let auto_include_otherlibs : (string -> unit) -> Load_path.auto_include_callback
 
 let auto_include find_in_dir fn =
   if !Clflags.no_std_include then begin
-    Printf.eprintf ">> [auto_include] Clflags.no_std_include is true, abort \n";
+    Printf.eprintf ">> [handler_common/auto_include] Clflags.no_std_include is true, abort \n";
     raise Not_found
   end else begin
-    Printf.eprintf ">> [auto_include] Clflags.no_std_include is false, continue\n";
+    Printf.eprintf ">> [handler_common/auto_include] Clflags.no_std_include is false, continue\n";
     let alert = Location.auto_include_alert in
     auto_include_otherlibs alert find_in_dir fn
   end
@@ -102,7 +102,7 @@ let prepend_add (dir: Dir.t) =
     (Misc.normalized_unit_filename base)
   ) (Dir.files dir)
 
-let find_path fn =
+let find fn =
   try
     if is_basename fn && not !Sys.interactive then
       fst (find_file_in_cache fn)
@@ -111,7 +111,7 @@ let find_path fn =
       Misc.find_in_path (get_path_list ()) fn
 
   with Not_found -> begin
-    Printf.eprintf ">> [Find_path] attempt to auto-include %s\n" fn;
+    Printf.eprintf ">> [handler_common/find] attempt to auto-include %s\n" fn;
     (* may throw Not_found again *)
     auto_include Dir.find fn
   end
@@ -131,45 +131,49 @@ let find_normalized_with_visibility fn =
           (Misc.find_in_path_normalized (get_hidden_path_list ()) fn, Load_path.Hidden)
 
     with Not_found -> begin
-      Printf.eprintf ">> [Find_normalized_with_visibility] attempt to auto-include %s\n" fn;
+      Printf.eprintf ">> [handler_common/find_normalized] attempt to auto-include %s\n" fn;
       (* may throw Not_found again *)
       auto_include Dir.find_normalized fn_uncap, Load_path.Visible
     end
 
 
-let add_new_file_to_path : string -> string -> unit = fun dirname base ->
-  Printf.eprintf ">> [add_new_file_to_path] adding dirname=%s base=%s to global state\n" dirname base;
+let add_new_file_to_path : string -> unit = fun fullname ->
+  Printf.eprintf ">> [handler_common/add_new_file_to_path] adding %s to global state\n" fullname;
+
+  if not (Sys.file_exists fullname) then begin
+    Printf.eprintf ">> [handler_common/add_new_file_to_path] %s does not exist, giving up...\n" fullname;
+    raise Not_found
+  end;
+
+  let dirname = Filename.dirname fullname in
+  let basename = Filename.basename fullname in
   let dir = List.find (fun d -> Dir.path d = dirname) !visible_dirs in
 
-  let base_uncap = Misc.normalized_unit_filename base in
-  let base_uncap = match base_uncap with
+  let basename_uncap = match Misc.normalized_unit_filename basename with
     | Error _ -> raise Not_found
-    | Ok base_uncap -> base_uncap
+    | Ok uncap -> uncap
   in
-
-  let full_fn = Filename.concat dirname base in
-  let full_fn_uncap = Filename.concat dirname base_uncap in
 
   (* update the global state *)
   if Dir.hidden dir then begin
-    STbl.replace !hidden_files_uncap base_uncap full_fn_uncap;
-    STbl.replace !hidden_files base full_fn
+    STbl.replace !hidden_files_uncap basename_uncap fullname;
+    STbl.replace !hidden_files basename fullname
   end else begin
-    STbl.replace !visible_files_uncap base_uncap full_fn_uncap;
-    STbl.replace !visible_files base full_fn
+    STbl.replace !visible_files_uncap basename_uncap fullname;
+    STbl.replace !visible_files basename fullname
   end;
 
-  Dir.add_file dir base;
+  Dir.add_file dir basename;
 
   (* sanity checks *)
-  assert (find_path base = full_fn);
+  assert (find basename = fullname);
   let hidden = if Dir.hidden dir then Load_path.Hidden else Load_path.Visible in
-  assert (find_normalized_with_visibility base = (Filename.concat dirname base, hidden))
+  assert (find_normalized_with_visibility basename = (fullname, hidden))
 
 
 (* takes in a *.cm{i,o} file, finds it in the load path and compiles it *)
-let rec compile_dependency : string -> string = fun fn ->
-  Printf.eprintf ">> [compile_dependency] entering (fn=%s)\n" fn;
+let compile_dependency : string -> string = fun fn ->
+  Printf.eprintf ">> [handler_common/compile_dependency] entering (fn=%s)\n" fn;
 
   (* extract basename and uncapitalize it *)
   let base = Filename.basename fn in
@@ -178,102 +182,73 @@ let rec compile_dependency : string -> string = fun fn ->
     | Ok ubase -> ubase
   in
 
-  (* verify that fn is either a .cmi or a .cmo *)
-  let ext = Filename.extension fn in
-  if ext <> ".cmi" && ext <> ".cmo" then begin
-    Printf.eprintf ">> [compile_dependency] don't know what to do with %s\n" base;
-    raise Not_found;
+  (* verify that fn is a .cmi *)
+  if not (Filename.check_suffix fn ".cmi") then begin
+    Printf.eprintf ">> [handler_common/compile_dependency] don't know what to do with %s\n" base;
+    raise Not_found
   end;
 
   (* this should now be the basename prefix, i.e. Foo for path/Foo.ml *)
-  let name = Filename.chop_suffix base ext in
-
-  (* if fn is a .cmi, we want to find a .mli, otherwise a .ml *)
-  let source_ext = if ext = ".cmi" then ".mli" else ".ml" in
+  let name = Filename.chop_suffix base ".cmi" in
+  let mli_file = name ^ ".mli" in
 
   (* fn may contain a path prefix, if we detect one, then use that directly *)
   (* if not found, this throws Not_Found *)
-  let maybe_path = Filename.dirname fn in
-  let full_source_file =
-    if maybe_path = "" || maybe_path = "." then
-      (* no path prefix, so we need to find it in the load path *)
-      find_path (name ^ source_ext)
-    else begin
-      (* we have a path prefix, so use that directly *)
-      Printf.eprintf ">> [compile_dependency] detected path %s, using it\n" maybe_path;
-      Filename.concat maybe_path (name ^ source_ext)
-    end
+  let mli_fullname = try
+    find mli_file
+  with Not_found ->
+    Printf.eprintf ">> [handler_common/compile_dependency] Fatal error: missing .mli for %s??\n" fn;
+    raise Not_found
   in
 
-  assert (Sys.file_exists full_source_file);
+  assert (Sys.file_exists mli_fullname);
 
   (* attempt to resolve full path of file, this may throw Not_Found *)
-  Printf.eprintf ">> [compile_dependency] source resolved to %s\n" full_source_file;
+  Printf.eprintf ">> [handler_common/compile_dependency] source resolved to %s\n" mli_fullname;
 
-  (* if the .cm{i,o} file is already here, skip
+  (* if the .cmi file is already here, skip
      todo: can we read info off of cache instead? *)
-  let full_compiled_file = (Filename.chop_suffix full_source_file source_ext) ^ ext in
-  if Sys.file_exists full_compiled_file then begin
-    Printf.eprintf ">> [compile_dependency] %s is already here, skipping\n" base;
-    full_compiled_file
-  end
+  let cmi_fullname = (Filename.chop_suffix mli_fullname ".mli") ^ ".cmi" in
+  if Sys.file_exists cmi_fullname then
+    Printf.eprintf ">> [handler_common/compile_dependency] %s is already here, skipping\n" cmi_fullname
 
-  else
-
-  let compile : unit -> unit = fun () ->
-    (* construct -I and -H args *)
-    let load_path_args =
-      List.flatten (List.map (fun d -> ["-I"; Dir.path d]) !visible_dirs) @
-      List.flatten (List.map (fun d -> ["-H"; Dir.path d]) !hidden_dirs)
-    in
-
-    let prog = "boot/ocamlrun" in
-    let args =
-      ["boot/ocamlc"; "-c"; full_source_file; "-nostdlib";
-       "-use-prims"; "runtime/primitives"; "-g"; "-strict-sequence";
-       "-principal"; "-absname"; "-w"; "+a-4-9-40-41-42-44-45-48";
-       "-warn-error"; "+a"; "-bin-annot"; "-strict-formats"] @ load_path_args
-    in
-
-    let cmd = Filename.quote_command prog args in
-    Printf.eprintf "[Sys.command] %s\n" cmd;
-    let exit_code = Sys.command cmd in
-    Printf.eprintf "[compile_dependency] exit code: %d\n" exit_code;
-
-    (* todo: throw exception instead? *)
-    assert (exit_code = 0)
-  in
-
-  (* if we are compiling a .ml, compile the .mli if it exists (it is ok if not)
-     (otherwise we get inconsistent .cmi's from the auto-generated one
-     via compilation of a .ml, and compilation of the .mli) *)
-  if source_ext = ".ml" then begin
+  else begin
+    (* compile the source file *)
     try
-      let cmi_file = (Filename.chop_suffix full_source_file ".ml") ^ ".cmi" in
-      Printf.eprintf ">> [compile_dependency] attempting to compile %s (ok if it doesn't exist)\n" cmi_file;
-      compile_dependency cmi_file |> ignore
+      (* construct -I and -H args *)
+      let load_path_args =
+        List.flatten (List.map (fun d -> ["-I"; Dir.path d]) !visible_dirs) @
+        List.flatten (List.map (fun d -> ["-H"; Dir.path d]) !hidden_dirs)
+      in
 
-    with Not_found ->
-      Printf.eprintf ">> [compile_dependency] no .mli file for %s, continuing...\n" full_source_file
+      let prog = "boot/ocamlrun" in
+      let args =
+        ["boot/ocamlc"; "-c"; mli_fullname; "-nostdlib";
+        "-use-prims"; "runtime/primitives"; "-g"; "-strict-sequence";
+        "-principal"; "-absname"; "-w"; "+a-4-9-40-41-42-44-45-48";
+        "-warn-error"; "+a"; "-bin-annot"; "-strict-formats"] @ load_path_args
+      in
+
+      let cmd = Filename.quote_command prog args in
+      Printf.eprintf ">> [handler_common/Sys.command] %s\n" cmd;
+      let exit_code = Sys.command cmd in
+      Printf.eprintf ">> [handler_common/compile_dependency] exit code: %d\n" exit_code;
+
+      (* todo: throw exception instead? *)
+      assert (exit_code = 0);
+      Printf.eprintf ">> [handler_common/compile_dependency] compiled successfully!\n";
+
+      (* add the new source file to global state *)
+      add_new_file_to_path cmi_fullname;
+      Printf.eprintf ">> [handler_common/compile_dependency] added %s to global state\n" cmi_fullname;
+
+    with Not_found -> begin
+      Printf.eprintf ">> [handler_common/compile_dependency] failed to compile %s, quitting \n" mli_fullname;
+      raise Not_found
+    end
   end;
 
-  (* compile the source file *)
-  let () = try
-    compile ();
-    Printf.eprintf ">> [compile_dependency] compiled successfully!\n"
-  with Not_found -> begin
-    Printf.eprintf ">> [compile_dependency] failed to compile %s, quitting \n" full_source_file;
-    raise Not_found
-  end
-
-  in
-
-  (* add the new source file to global state *)
-  let dirname = Filename.dirname full_source_file in
-  add_new_file_to_path dirname base;
-  Printf.eprintf ">> [compile_dependency] added %s to global state\n" (find_path base);
-
-  full_compiled_file
+  cmi_fullname
 
 let handle f =
   Effect.Deep.match_with f ()
@@ -285,20 +260,16 @@ let handle f =
       (* find : string -> string *)
       | Load_path.Find_path fn ->
         Some (fun (k: (c, _) continuation) ->
-          Printf.eprintf ">> [Find_path] %s\n" fn;
           try
-            let ret = find_path fn in
+            let ret = find fn in
             (* great! nothing wrong *)
             Effect.Deep.continue k ret
 
           with Not_found -> begin
             (* at this point, we need to compile the dependency *)
-            Printf.eprintf ">> [Find_path] compiling dependency %s\n" fn;
+            Printf.eprintf ">> [Find_path] missing, compiling dependency %s\n" fn;
             try
-              let full_fn = compile_dependency fn in
-              Effect.Deep.continue k full_fn
-
-            (* where is the dependency?!?! *)
+              Effect.Deep.continue k (compile_dependency fn)
             with Not_found ->
               Effect.Deep.discontinue k Not_found (* give up :( *)
           end
@@ -307,19 +278,15 @@ let handle f =
       (* find_normalized_with_visibility : string -> string * visibility *)
       | Load_path.Find_normalized_with_visibility fn ->
         Some (fun (k: (c, _) continuation) ->
-          Printf.eprintf ">> [Find_normalized_with_visibility] %s\n" fn;
           try
             Effect.Deep.continue k (find_normalized_with_visibility fn)
           with Not_found -> begin
             (* at this point, we need to compile the dependency *)
-            Printf.eprintf ">> [Find_normalized_with_visibility] compiling dependency %s\n" fn;
+            Printf.eprintf ">> [Find_normalized_with_visibility] missing, compiling dependency %s\n" fn;
             try
-              let full_fn = compile_dependency fn in
-              Effect.Deep.continue k (full_fn, Load_path.Visible)
-
-            (* where is the dependency?!?! *)
+              Effect.Deep.continue k (compile_dependency fn, Load_path.Visible)
             with Not_found ->
-              Effect.Deep.discontinue k Not_found (* give up :( *)
+              Effect.Deep.discontinue k Not_found
           end
         )
 

@@ -40,6 +40,6 @@ val append_dir : Dir.t -> unit
 (** [append_dir d] adds [d] to the end of the load path (i.e. at lowest
     priority. *)
 
-val add_new_file_to_path : string -> string -> unit
+val add_new_file_to_path : string -> unit
 
 val prepend_add : Dir.t -> unit
