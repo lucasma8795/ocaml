@@ -61,7 +61,7 @@ let fresh name =
           Slot { ref = r.ref; value = r.snapshot }
     ) global_bindings.refs
   in
-  Printf.eprintf "[local_store:fresh] Created new store with %d slots\n%!" (List.length slots);
+  Printf.eprintf "%d -> [local_store:fresh] created new store with %d slots\n%!" (Domain.self () :> int) (List.length slots);
   global_bindings.frozen <- true;
   slots, name
 
@@ -69,8 +69,40 @@ let with_store (slots, name) f =
   assert (not global_bindings.is_bound);
   global_bindings.is_bound <- true;
   List.iter (fun (Slot {ref;value}) -> ref := value) slots;
-  Printf.eprintf "[local_store:with_store] Restored %d slots for store '%s'\n%!" (List.length slots) name;
+  Printf.eprintf "%d -> [local_store:with_store] restored %d slots for store '%s'\n%!" (Domain.self () :> int) (List.length slots) name;
   Fun.protect f ~finally:(fun () ->
     List.iter (fun (Slot s) -> s.value <- !(s.ref)) slots;
     global_bindings.is_bound <- false;
   )
+
+let active_store_name = ref None
+
+let open_store (slots, name) =
+  if (!active_store_name <> None) then
+    Printf.eprintf "%d -> [local_store:open_store] error: store with name '%s' is already active\n%!"
+      (Domain.self () :> int) (Option.get !active_store_name);
+
+  assert (!active_store_name = None);
+  assert (not global_bindings.is_bound);
+  global_bindings.is_bound <- true;
+  active_store_name := Some name;
+  Printf.eprintf "%d -> [local_store:open_store] restored %d slots for store '%s'\n%!" (Domain.self () :> int) (List.length slots) name;
+  List.iter (fun (Slot {ref;value}) -> ref := value) slots
+
+let close_store (slots, name) =
+  if (!active_store_name <> Some name) then begin
+    match !active_store_name with
+    | None ->
+      Printf.eprintf "%d -> [local_store:close_store] error: tried to close '%s' but there was no active store\n%!"
+        (Domain.self () :> int) name
+    | Some active_name ->
+        Printf.eprintf "%d -> [local_store:close_store] error: store with name '%s' is active but tried to close '%s'!\n%!"
+          (Domain.self () :> int) active_name name
+  end;
+
+  assert (!active_store_name = Some name);
+  assert (global_bindings.is_bound);
+  global_bindings.is_bound <- false;
+  active_store_name := None;
+  Printf.eprintf "%d -> [local_store:close_store] saved %d slots to store '%s'\n%!" (Domain.self () :> int) (List.length slots) name;
+  List.iter (fun (Slot s) -> s.value <- !(s.ref)) slots

@@ -106,7 +106,7 @@ let handle f =
       (* find : string -> string *)
       | Load_path.Find_path fn ->
         Some (fun (k: (c, _) continuation) ->
-          Printf.eprintf "[Find_path] %s\n" fn;
+          (* Printf.eprintf "[Find_path] %s\n" fn; *)
           try
             let ret =
               try
@@ -115,7 +115,7 @@ let handle f =
                 else
                   Misc.find_in_path (get_path_list ()) fn
               with Not_found -> begin
-                Printf.eprintf "[Find_path] attempt to auto-include %s\n" fn;
+                Printf.eprintf "[find] attempt to auto-include %s\n" fn;
                 auto_include Dir.find fn
               end
             in
@@ -123,14 +123,14 @@ let handle f =
 
           with Not_found ->
             (* just give up at this point *)
-            Printf.eprintf "[Find_path] discontinuing (fn = %s)\n" fn;
+            Printf.eprintf "[find] discontinuing (fn = %s)\n" fn;
             Effect.Deep.discontinue k Not_found
         )
 
       (* find_normalized_with_visibility : string -> string * visibility *)
       | Load_path.Find_normalized_with_visibility fn ->
         Some (fun (k: (c, _) continuation) ->
-          Printf.eprintf "[Find_normalized_with_visibility] %s\n" fn;
+          (* Printf.eprintf "[find_normalized] %s\n" fn; *)
           match Misc.normalized_unit_filename fn with
           | Error _ -> raise Not_found
           | Ok fn_uncap ->
@@ -147,7 +147,7 @@ let handle f =
                     | Not_found ->
                       (Misc.find_in_path_normalized (get_hidden_path_list ()) fn, Load_path.Hidden)
                 with Not_found -> begin
-                  Printf.eprintf "[Find_normalized_with_visibility] attempt to auto-include %s\n" fn;
+                  Printf.eprintf "[find_normalized] attempt to auto-include %s\n" fn;
                   auto_include Dir.find_normalized fn_uncap, Load_path.Visible
                 end
               in
@@ -155,7 +155,7 @@ let handle f =
 
             with Not_found ->
               (* just give up at this point *)
-              Printf.eprintf "[Find_normalized_with_visibility] discontinuing (fn = %s)\n" fn;
+              Printf.eprintf "[find_normalized] discontinuing (fn = %s)\n" fn;
               Effect.Deep.discontinue k Not_found
         )
 
@@ -220,10 +220,10 @@ let handle f =
           List.iter prepend_add !hidden_dirs;
           List.iter prepend_add !visible_dirs;
 
-          Printf.eprintf "[Init_path] visible_dirs: %s\n"
+          (* Printf.eprintf "[Init_path] visible_dirs: %s\n"
             (String.concat ", " (List.map Dir.path !visible_dirs));
           Printf.eprintf "[Init_path] hidden_dirs: %s\n"
-            (String.concat ", " (List.map Dir.path !hidden_dirs));
+            (String.concat ", " (List.map Dir.path !hidden_dirs)); *)
 
           Effect.Deep.continue k ();
         )

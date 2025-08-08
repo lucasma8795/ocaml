@@ -58,6 +58,10 @@ val with_store : store -> (unit -> 'a) -> 'a
     If [f] updates any of the registered refs, [s] is updated to remember those
     changes. *)
 
+val open_store : store -> unit
+
+val close_store : store -> unit
+
 val reset : unit -> unit
 (** Resets all the references to the initial snapshot (i.e. to the same values
     that new instances start with). *)

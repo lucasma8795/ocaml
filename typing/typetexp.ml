@@ -22,6 +22,7 @@ open Parsetree
 open Typedtree
 open Types
 open Ctype
+open Local_store
 
 exception Already_bound
 
@@ -127,13 +128,12 @@ end = struct
   (* These are the "global" type variables: they were in scope before
      we started processing the current type.
   *)
-  let type_variables = ref (TyVarMap.empty : (type_expr * bool ref) TyVarMap.t)
+  let type_variables = s_ref TyVarMap.empty
 
   (* These are variables that have been used in the currently-being-checked
      type.
   *)
-  let used_variables =
-    ref (TyVarMap.empty : (type_expr * Location.t * bool ref) TyVarMap.t)
+  let used_variables = s_ref TyVarMap.empty
 
   (* These are variables we expect to become univars (they were introduced with
      e.g. ['a .]), but we need to make sure they don't unify first.  Why not
@@ -148,7 +148,7 @@ end = struct
        if possible *)
   }
 
-  let univars = ref ([] : (string * pending_univar) list)
+  let univars = s_ref ([] : (string * pending_univar) list)
   let assert_univars uvs =
     assert (List.for_all (fun (_name, v) -> not_generic v.univar) uvs)
 
@@ -156,7 +156,7 @@ end = struct
      current type. Used to force free variables in method types to become
      univars.
   *)
-  let pre_univars = ref ([] : type_expr list)
+  let pre_univars = s_ref ([] : type_expr list)
 
   let reset () =
     reset_global_level ();
@@ -359,9 +359,9 @@ end
 
 (* Support for first-class modules. *)
 
-let transl_modtype_longident = ref (fun _ -> assert false)
-let transl_modtype = ref (fun _ -> assert false)
-let check_package_with_type_constraints = ref (fun _ -> assert false)
+let transl_modtype_longident = s_ref (fun _ -> assert false)
+let transl_modtype = s_ref (fun _ -> assert false)
+let check_package_with_type_constraints = s_ref (fun _ -> assert false)
 
 let sort_constraints_no_duplicates loc env l =
   List.sort

@@ -171,12 +171,12 @@ let store_normalized_newline newline =
   else store_substring newline ~pos:1 ~len:(len - 1)
 
 (* To store the position of the beginning of a string and comment *)
-let string_start_loc = ref Location.none
-let comment_start_loc = ref []
+let string_start_loc = Local_store.s_ref Location.none
+let comment_start_loc = Local_store.s_ref []
 let in_comment () = !comment_start_loc <> []
-let is_in_string = ref false
+let is_in_string = Local_store.s_ref false
 let in_string () = !is_in_string
-let print_warnings = ref true
+let print_warnings = Local_store.s_ref true
 
 (* Escaped chars are interpreted in strings unless they are in comments. *)
 let store_escaped_char lexbuf c =
