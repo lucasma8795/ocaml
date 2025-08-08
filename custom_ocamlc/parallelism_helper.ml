@@ -1,5 +1,6 @@
 open Effect
 open Effect.Deep
+open Custom_misc
 
 type 'a promise_state =
 | Pending
@@ -67,7 +68,7 @@ let rec await p =
   | Pending -> Domain.cpu_relax (); await p
   | Resolved v -> v
   | Rejected exn -> begin
-    Printf.eprintf "[await] promise rejected with exception: %s\n" (Printexc.to_string exn);
+    dbg "[await] promise rejected with exception: %s\n" (Printexc.to_string exn);
     raise exn
   end
 
@@ -76,7 +77,7 @@ let try_resolve p =
   | Pending -> None
   | Resolved v -> Some v
   | Rejected exn -> begin
-    Printf.eprintf "[try_resolve] promise rejected with exception: %s\n" (Printexc.to_string exn);
+    dbg "[try_resolve] promise rejected with exception: %s\n" (Printexc.to_string exn);
     raise exn
   end
 
@@ -99,7 +100,7 @@ module Pool = struct
       (* check if suspended tasks can be resumed *)
       Mutex.lock p.suspended_tasks_mutex;
       let pred = fun (_, promise) -> Atomic.get promise <> Pending in
-      let (resumable_tasks, new_suspended_tasks) =
+      let (resumable_tasks, blocked_tasks) =
         List.partition pred !(p.suspended_tasks)
       in
 
@@ -108,14 +109,17 @@ module Pool = struct
         let task =
           match Atomic.get promise with
           | Resolved v -> fun () -> continue fiber v
-          | Rejected exn -> fun () -> discontinue fiber exn
+          | Rejected exn ->
+            fun () ->
+              dbg "[worker] rejecting task with exception: %s\n" (Printexc.to_string exn);
+              discontinue fiber exn
           | Pending -> failwith "impossible" (* should have been filtered out *)
         in
         TSQueue.add task p.task_queue
       ) resumable_tasks;
 
       (* update the suspended tasks list *)
-      p.suspended_tasks := new_suspended_tasks;
+      p.suspended_tasks := blocked_tasks;
       Mutex.unlock p.suspended_tasks_mutex;
 
       (* wait for a new task or shutdown signal *)
@@ -174,6 +178,8 @@ module Pool = struct
             Atomic.set promise (Resolved result);
             Atomic.decr p.active_tasks;
           with exn ->
+            dbg "[Pool/submit] task failed with exception: %s\n" (Printexc.to_string exn);
+            Printexc.print_backtrace stderr;
             Atomic.set promise (Rejected exn);
             Atomic.decr p.active_tasks
         in

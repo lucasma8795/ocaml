@@ -1,6 +1,7 @@
 open Effect.Deep
 open Clflags
 open Custom_load_path
+open Custom_misc
 open Parallelism_helper
 
 type pid = int
@@ -22,7 +23,7 @@ type suspended_compilation = {
 
 (* Represents the state of a process currently under parallel compilation *)
 type compilation_state = {
-  promise : int promise; (* exit code *)
+  promise : unit promise;
   waiting_tasks : suspended_compilation list ref;
 }
 
@@ -44,196 +45,111 @@ let resolve_source_fullname cmi_file ~normalize =
   assert (Sys.file_exists mli_fullname);
   mli_fullname
 
-let compile_implementation ctx impl_filename =
-  Printf.eprintf "[compile_implementation] entering (file=%s)\n" impl_filename;
-  let Compenv.{
-    log = ppf;
-    compile_implementation;
-    compile_interface;
-    ocaml_mod_ext;
-    ocaml_lib_ext;
-  } = ctx in
-  let impl ~start_from name =
-    Compenv.readenv ppf (Before_compile name);
-    let opref = Compenv.output_prefix name in
-    objfiles := (opref ^ ocaml_mod_ext) :: !objfiles;
-   compile_implementation ~start_from ~source_file:name ~output_prefix:opref
-  in
-  impl ~start_from:Compiler_pass.Parsing impl_filename;
-  Printf.eprintf "[compile_implementation] finished compiling %s!\n" impl_filename
-
-(* Takes in a resolved .mli filename, compiles it in a separate process,
-   then returns the pid of the process that is compiling it *)
-let compile_dependency mli_fullname =
-  Printf.eprintf "* [compile_dependency] entering (file=%s)\n" mli_fullname;
-  assert (Filename.check_suffix mli_fullname ".mli");
-
-  try
-    (* construct -I and -H args *)
-    let load_path_args =
-      List.flatten (List.map (fun d -> let path = Dir.path d in ["-I"; if path = "" then "." else path]) !visible_dirs) @
-      List.flatten (List.map (fun d -> let path = Dir.path d in ["-H"; if path = "" then "." else path]) !hidden_dirs)
-    in
-
-    let prog = "boot/ocamlrun" in
-    let args =
-      ["boot/ocamlc"; "-c"; mli_fullname; "-nostdlib";
-       "-use-prims"; "runtime/primitives"; "-g"; "-strict-sequence";
-       "-principal"; "-absname"; "-w"; "+a-4-9-40-41-42-44-45-48";
-       "-warn-error"; "+a"; "-bin-annot"; "-strict-formats"] @ load_path_args
-    in
-
-    (* compile the .mli file *)
-    Printf.eprintf "* [Sys.command] %s %s\n" prog (String.concat " " args);
-
-    let cmd = Filename.quote_command prog args in
-    let exit_code = Sys.command cmd in
-    let cmi_fullname = (Filename.chop_suffix mli_fullname ".mli") ^ ".cmi" in
-    add_new_file_to_path cmi_fullname;
-    exit_code
-
-  with e -> begin
-    Printf.eprintf "* [compile_dependency] failed to compile %s, giving up... \n" mli_fullname;
-    raise Not_found
-  end
-
-let compile_ml_files env ml_files =
+let compile_ml_files ctx ml_files =
   Compmisc.init_path ();
 
-  let pool = Pool.create 8 in
-  List.iter (fun ml_file ->
+  let pool = Pool.create 1 in
+
+  let promises = List.map (fun ml_file ->
     (* resolve source fullname *)
     let ml_fullname = find ml_file in
 
-    try
-      (* this holds the compilation's global state *)
-      let store = Local_store.fresh ml_fullname in
-      let compile () =
-        let handle_not_found cmi_file resume k ~normalize =
-          Printf.eprintf "[compile_ml_files] %s depends on %s but it is not found!\n" ml_fullname cmi_file;
+    let handle_not_found store cmi_file resume k ~normalize =
+      assert (Filename.check_suffix cmi_file ".cmi");
+      dbg "[handle_not_found] %s depends on %s but it is not found!\n" ml_fullname cmi_file;
 
-          (* resolve source file *)
-          let mli_fullname = resolve_source_fullname cmi_file ~normalize in
-          let cmi_fullname = (Filename.chop_suffix mli_fullname ".mli") ^ ".cmi" in
-          Printf.eprintf "[compile_ml_files] %s resolved to %s\n" cmi_file cmi_fullname;
+      (* resolve source file *)
+      let mli_fullname = resolve_source_fullname cmi_file ~normalize in
+      let cmi_fullname = (Filename.chop_suffix mli_fullname ".mli") ^ ".cmi" in
+      dbg "[handle_not_found] %s resolved to %s\n" cmi_file cmi_fullname;
 
-          (* ensure it really isn't here *)
-          if Sys.file_exists cmi_fullname then begin
-            Printf.eprintf "[compile_ml_files] %s already exists (inconsistent load path state?)\n" cmi_fullname;
+      (* ensure it really isn't here *)
+      if Sys.file_exists cmi_fullname then begin
+        dbg "[handle_not_found] %s already exists (inconsistent load path state?)\n" cmi_fullname;
+        add_new_file_to_path cmi_fullname;
+        resume cmi_fullname
+
+      end else
+        dbg "[handle_not_found] compiling dependency %s...\n" cmi_fullname;
+
+        (* effects don't cross domain boundaries, so we need to install a fresh handler *)
+        let promise = Pool.submit pool (fun () ->
+          try
+            dbg "[task] starting work on %s...\n" cmi_fullname;
+            let task () = compile_interface ctx mli_fullname in
+
+            let new_store = Local_store.fresh cmi_fullname in
+            Local_store.open_store new_store;
+            Effect_handler.handle task;
             add_new_file_to_path cmi_fullname;
-            resume cmi_fullname
+            Local_store.close_store new_store;
 
-          end else
-            begin match Hashtbl.find_opt compiling cmi_fullname with
-            | None ->
-              (* there is no process compiling the interface *)
-              Printf.eprintf "[compile_ml_files] there is no process compiling %s! starting one...\n" cmi_fullname;
-              let promise = Pool.submit pool (fun () -> compile_dependency mli_fullname) in
+            dbg "[task] finished work on %s!\n" cmi_fullname
 
-              Hashtbl.add compiling cmi_fullname {
-                promise;
-                waiting_tasks = ref [{ store; continuation = k }]
-              }
+          with e ->
+            dbg "[task] %s failed with exception: %s\n" cmi_fullname (Printexc.to_string e);
+            dbg_print_backtrace ();
+            raise e
+        ) in
 
-            | Some { promise; waiting_tasks } -> (* this file is already being compiled *)
-              Printf.eprintf "[compile_ml_files] %s is already being compiled! adding continuation to list...\n" cmi_fullname;
-              waiting_tasks := { store; continuation = k } :: !waiting_tasks
-            end
-        in
-        begin match compile_implementation env ml_fullname with
-          | () -> (* return *)
-            (* update the load path with the new .cmo file *)
-            let cmo_fullname = (Filename.chop_suffix ml_fullname ".ml") ^ ".cmo" in
-            add_new_file_to_path cmo_fullname
+        Local_store.close_store store;
+        suspend_on promise;
+        dbg "[handle_not_found] resuming compilation of %s\n" ml_fullname;
+        Local_store.open_store store;
+        resume cmi_fullname
+    in
 
-          | effect (Load_path.Find_path cmi_file), k ->
-            begin
-              assert (Filename.check_suffix cmi_file ".cmi");
-              try
-                let cmi_fullname = Custom_load_path.find cmi_file in
+    let task () =
+      let store = Local_store.fresh ml_fullname in
+      Local_store.open_store store;
+      match compile_implementation ctx ml_fullname with
+      | () -> (* return *)
+        (* update the load path with the new .cmo file *)
+        let cmo_fullname = (Filename.chop_suffix ml_fullname ".ml") ^ ".cmo" in
+        add_new_file_to_path cmo_fullname;
+        Local_store.close_store store
 
-                try
-                  continue k cmi_fullname
-                with e -> begin
-                  Printexc.print_backtrace stderr;
-                  raise e
-                end
-
-              with Not_found ->
-                let resume = continue k in
-                handle_not_found cmi_file resume (Find k) ~normalize:false
-            end
-
-          | effect (Load_path.Find_normalized_with_visibility cmi_file), k ->
-            begin
-              assert (Filename.check_suffix cmi_file ".cmi");
-
-              try
-                let (cmi_fullname, visibility) = Custom_load_path.find_normalized_with_visibility cmi_file in
-
-                try
-                  continue k (cmi_fullname, visibility)
-                with e -> begin
-                  Printexc.print_backtrace stderr;
-                  raise e
-                end
-
-              with Not_found ->
-                let resume fn = continue k (fn, Load_path.Visible) in
-                handle_not_found cmi_file resume (Find_with_visibility k) ~normalize:true
-            end
-
-          | exception exn ->
-            Printf.eprintf "[compile_ml_files] fatal error: exception while compiling %s: %s\n" ml_fullname (Printexc.to_string exn);
-            raise exn
+      | effect (Load_path.Find_path cmi_file), k ->
+        dbg "[compile_ml_files/find] looking for %s...\n" cmi_file;
+        assert (Filename.check_suffix cmi_file ".cmi");
+        begin match Custom_load_path.find cmi_file with
+        | cmi_fullname -> continue k cmi_fullname
+        | exception Not_found ->
+          let resume = continue k in
+          handle_not_found store cmi_file resume (Find k) ~normalize:false
         end
-      in
-      Local_store.with_store store compile
 
-    with e -> begin
-      Printf.eprintf "[compile_ml_files] Exception while compiling %s!\n%!" ml_fullname;
-      Printf.eprintf "Fatal error: %s\n%!" (Printexc.to_string e);
-      Printexc.print_backtrace stderr;
-      raise e
-    end;
-
-    (* raise Not_found *)
-  ) ml_files;
-
-  (* wait for all compilations to finish *)
-  let rec wait_for_compilations () =
-    let to_remove = ref [] in
-    Hashtbl.iter (fun cmi_fullname { promise; waiting_tasks } ->
-      match try_resolve promise with
-      | None -> () (* process is still running *)
-
-      | Some 0 -> (* resume all continuations for this process *)
-        Printf.eprintf "[compile_ml_files] %s compiled successfully! resuming %d suspended compilations waiting on it... \n" cmi_fullname (List.length !waiting_tasks);
-        List.iter (fun { store; continuation } ->
-          Local_store.with_store store (fun () ->
-            match continuation with
-            | Find k -> continue k cmi_fullname
-            | Find_with_visibility k ->
-              continue k (cmi_fullname, Load_path.Visible)
-          )
-        ) !waiting_tasks;
-        to_remove := cmi_fullname :: !to_remove
-
-      | Some exit_code ->
-        Printf.eprintf "[compile_ml_files] compilation of %s failed with abnormal exit code %d\n" cmi_fullname exit_code;
-        exit 1
+      | effect (Load_path.Find_normalized_with_visibility cmi_file), k ->
+        dbg "[compile_ml_files/find_normalized] looking for %s...\n" cmi_file;
+        assert (Filename.check_suffix cmi_file ".cmi");
+        begin match Custom_load_path.find_normalized_with_visibility cmi_file with
+        | (cmi_fullname, visibility) ->
+          continue k (cmi_fullname, visibility)
+        | exception Not_found ->
+          (* todo: don't always assume Visible *)
+          let resume fn = continue k (fn, Load_path.Visible) in
+          handle_not_found store cmi_file resume (Find_with_visibility k) ~normalize:true
+        end
 
       | exception exn ->
-        Printf.eprintf "[compile_ml_files] compilation of %s failed with exception: %s\n" cmi_fullname (Printexc.to_string exn);
-        exit 1
+        dbg "[compile_ml_files] fatal error: exception while compiling %s: %s\n" ml_fullname (Printexc.to_string exn);
+        Printexc.print_backtrace stderr;
+        raise exn
+    in
 
-    ) compiling;
+    Pool.submit pool (fun () -> Effect_handler.handle task)
+  ) ml_files
 
-    (* remove finished compilations *)
-    List.iter (fun fn -> Hashtbl.remove compiling fn) !to_remove
   in
 
   (* wait for all compilations to finish *)
-  while Hashtbl.length compiling > 0 do
-    wait_for_compilations ();
-  done
+  Pool.join_and_shutdown pool;
+  List.iter (fun promise ->
+    match await promise with
+    | () -> ()
+    | exception exn ->
+      let ml_file = List.nth ml_files (List.length promises - 1) in
+      dbg "[compile_ml_files] fatal error: exception while compiling %s: %s\n" ml_file (Printexc.to_string exn);
+      Printexc.print_backtrace stderr;
+      raise exn
+  ) promises

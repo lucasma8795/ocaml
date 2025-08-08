@@ -1,7 +1,5 @@
 open Load_path
 
-val visible_dirs : Dir.t list ref
-val hidden_dirs : Dir.t list ref
 
 val reset : unit -> unit
 (** Remove all directories *)
@@ -43,3 +41,11 @@ val append_dir : Dir.t -> unit
 val add_new_file_to_path : string -> unit
 
 val prepend_add : Dir.t -> unit
+
+val prepend_dir : Dir.t -> unit
+
+val remove_dir : string -> unit
+
+val get_paths : unit -> Load_path.paths
+
+val get_visible : unit -> Dir.t list

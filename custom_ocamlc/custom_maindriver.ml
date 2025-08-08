@@ -29,7 +29,12 @@ let implementation ~start_from ~source_file ~output_prefix =
   | _ -> Misc.fatal_errorf "Cannot start from %s"
            (Clflags.Compiler_pass.to_string start_from)
 
-let process_deferred_actions env =
+let interface ~source_file ~output_prefix =
+  let unit_info = Unit_info.make ~source_file Intf output_prefix in
+  with_info ~dump_ext:"cmi" unit_info @@ fun info ->
+  Compile_common.interface info
+
+let process_deferred_actions ctx =
   let final_output_name = !Clflags.output_name in
   (* Make sure the intermediate products don't clash with the final one
      when we're invoked like: ocamlopt -o foo bar.c baz.ml. *)
@@ -78,7 +83,7 @@ let process_deferred_actions env =
 
   ) (List.rev !Compenv.deferred_actions)
   in
-  compile_ml_files env files_to_compile;
+  compile_ml_files ctx files_to_compile;
 
   Printf.eprintf "[process_deferred_actions] all done! exiting...\n%!";
 
@@ -107,7 +112,7 @@ let main argv ppf =
       process_deferred_actions Compenv.{
         log = ppf;
         compile_implementation = implementation;
-        compile_interface = Compile.interface;
+        compile_interface = interface;
         ocaml_mod_ext = ".cmo";
         ocaml_lib_ext = ".cma";
       }
