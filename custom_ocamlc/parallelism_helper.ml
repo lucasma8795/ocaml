@@ -178,8 +178,7 @@ module Pool = struct
             Atomic.set promise (Resolved result);
             Atomic.decr p.active_tasks;
           with exn ->
-            dbg "[Pool/submit] task failed with exception: %s\n" (Printexc.to_string exn);
-            Printexc.print_backtrace stderr;
+            dbg "[pool/submit] task failed with exception: %s\n" (Printexc.to_string exn);
             Atomic.set promise (Rejected exn);
             Atomic.decr p.active_tasks
         in
