@@ -1,5 +1,4 @@
 open Effect.Deep
-open Clflags
 open Custom_load_path
 open Custom_misc
 open Parallelism_helper
@@ -7,13 +6,8 @@ open Effect_handler
 
 type filename = string
 type visibility = Load_path.visibility
-type store = Local_store.store
 
 module Dir = Load_path.Dir
-
-type load_path_continuation =
-  | Find of (filename, unit) continuation
-  | Find_with_visibility of (filename * visibility, unit) continuation
 
 let pending_compilation : (filename, unit promise) Hashtbl.t =
   Hashtbl.create 16
