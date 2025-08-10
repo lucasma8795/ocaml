@@ -1,9 +1,9 @@
-let qux = fun x -> x + 1
+type t = int
 
-(* type t = int
+let qux : t -> int = fun x -> x + 1
 
-let zero = 0
-let one = 1
-let two = 2
-let three = 3
-let four = 4 *)
+let zero  : t = 0
+let one   : t = 1
+let two   : t = 2
+let three : t = 3
+let four  : t = 4

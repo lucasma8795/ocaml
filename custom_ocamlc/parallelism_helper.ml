@@ -204,4 +204,4 @@ module Pool = struct
       Array.iter Domain.join p.domains;
 end
 
-let suspend_on p = perform (Suspend_task p)
+let task_suspend_until p = perform (Suspend_task p)

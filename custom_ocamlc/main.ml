@@ -1,8 +1,8 @@
-open Clflags
+open Effect_handler
 
 let () =
   let run () = exit (Custom_maindriver.main Sys.argv Format.err_formatter) in
-  Effect_handler.handle run
+  base_effect_handler run
 
 (*
 

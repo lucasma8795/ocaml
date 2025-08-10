@@ -1,1 +1,1 @@
-val handle : (unit -> 'a) -> 'a
+val base_effect_handler : (unit -> 'a) -> 'a

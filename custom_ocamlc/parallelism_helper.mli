@@ -68,9 +68,9 @@ module Pool : sig
       down the thread pool. *)
 end
 
-val suspend_on : unit promise -> unit
-(** [suspend p] suspends the calling task until the promise [p] is resolved,
-    allowing other tasks to run on the calling domain.
+val task_suspend_until : unit promise -> unit
+(** [task_suspend_until p] suspends the calling task until the promise [p] is
+    resolved, freeing up the calling domain for it to take other tasks.
     Must be called from within a task that is submitted to a pool, otherwise
     effects may not be handled.
 

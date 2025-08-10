@@ -4,7 +4,7 @@ open Effect.Deep
 
 module Dir = Load_path.Dir
 
-let handle f =
+let base_effect_handler f =
   Effect.Deep.match_with f ()
   {
     retc = (fun ret -> ret);

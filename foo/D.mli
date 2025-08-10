@@ -1,10 +1,9 @@
-val qux : int -> int
+type t
 
-(* type t
-val zero : t
-val one : t
-val two : t
+val qux : t -> int
+
+val zero  : t
+val one   : t
+val two   : t
 val three : t
-val four : t
-
-val add : t -> t -> t *)
+val four  : t
