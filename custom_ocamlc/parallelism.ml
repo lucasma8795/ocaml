@@ -30,16 +30,14 @@ let rec handle (compile : Compenv.action_context -> filename -> unit)
   (ctx : Compenv.action_context) (store : Local_store.store)
   (fullname : filename)
 =
-  let finished = ref false in
-
   let override () =
     match compile ctx fullname with
-    | () -> finished := true
+    | () -> ()
 
     | effect (Load_path.Find_path dep), k ->
       dbg "[compile_dependency/find] %s is looking for %s...\n" fullname dep;
       assert (Filename.check_suffix dep ".cmi");
-      begin match Custom_load_path.find dep with
+      begin match find dep with
       | dep_fullname -> continue k dep_fullname
       | exception Not_found ->
         let resume (fn : filename) = continue k fn in
@@ -49,7 +47,7 @@ let rec handle (compile : Compenv.action_context -> filename -> unit)
     | effect (Load_path.Find_normalized_with_visibility dep), k ->
       dbg "[compile_dependency/find_normalized] %s is looking for %s...\n" fullname dep;
       assert (Filename.check_suffix dep ".cmi");
-      begin match Custom_load_path.find_normalized_with_visibility dep with
+      begin match find_normalized_with_visibility dep with
       | (dep_fullname, visibility) -> continue k (dep_fullname, visibility)
       | exception Not_found ->
         (* todo: don't always assume Visible *)
@@ -63,9 +61,7 @@ let rec handle (compile : Compenv.action_context -> filename -> unit)
       Local_store.close_store store;
       raise exn
   in
-
-  base_effect_handler override;
-  assert (!finished)
+  base_effect_handler override
 
 and
 
@@ -83,19 +79,13 @@ compile_dependency (ctx : Compenv.action_context)
   dbg "[compile_dependency] source of %s resolved to %s\n" dep mli_fullname;
 
   (* check that no one is compiling it already *)
-  match Hashtbl.find_opt pending_compilation mli_fullname with
+  begin match Hashtbl.find_opt pending_compilation mli_fullname with
   | Some promise ->
     dbg "[compile_dependency] %s is already being compiled! backing off...\n" mli_fullname;
     Local_store.close_store parent_store;
-    task_suspend_until promise; (* back off *)
+    task_suspend_until promise (* back off *)
 
-    (* todo: fix ridiculous bug here??? *)
-    dbg "[compile_dependency] resuming compilation of %s (was suspended on %s)\n" parent cmi_fullname;
-    assert (Sys.file_exists cmi_fullname);
-    Local_store.open_store parent_store;
-    resume cmi_fullname
-
-  | None -> begin
+  | None ->
     (* ensure it really isn't here *)
     if Sys.file_exists cmi_fullname then begin
       dbg "[compile_dependency] %s already exists (inconsistent load path state?)\n" cmi_fullname;
@@ -125,13 +115,13 @@ compile_dependency (ctx : Compenv.action_context)
     Local_store.close_store parent_store;
     Hashtbl.add pending_compilation mli_fullname promise;
     task_suspend_until promise; (* back off *)
-    Hashtbl.remove pending_compilation mli_fullname;
+    Hashtbl.remove pending_compilation mli_fullname
+  end;
 
-    dbg "[compile_dependency] resuming compilation of %s (was suspended on %s)\n" parent cmi_fullname;
-    assert (Sys.file_exists cmi_fullname);
-    Local_store.open_store parent_store;
-    resume cmi_fullname
-  end
+  dbg "[compile_dependency] resuming compilation of %s (was suspended on %s)\n" parent cmi_fullname;
+  assert (Sys.file_exists cmi_fullname);
+  Local_store.open_store parent_store;
+  resume cmi_fullname
 
 let compile_ml_files ctx ml_files =
   Compmisc.init_path ();

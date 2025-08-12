@@ -160,8 +160,8 @@ module Pool = struct
 
     (* update the pool with the actual domains *)
     begin match Atomic.get pool with
-    | Some pool_data -> Atomic.set pool (Some { pool_data with domains })
-    | None -> failwith "impossible";
+      | Some pool_data -> Atomic.set pool (Some { pool_data with domains })
+      | None -> failwith "impossible";
     end;
 
     pool
