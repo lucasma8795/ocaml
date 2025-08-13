@@ -98,10 +98,10 @@ exception Error of Location.t * Env.t * error
 
 (* Support for first-class modules. *)
 val transl_modtype_longident:  (* from Typemod *)
-    (Location.t -> Env.t -> Longident.t -> Path.t) ref
+    (Location.t -> Env.t -> Longident.t -> Path.t) Domain.DLS.key
 val transl_modtype: (* from Typemod *)
-    (Env.t -> Parsetree.module_type -> Typedtree.module_type) ref
+    (Env.t -> Parsetree.module_type -> Typedtree.module_type) Domain.DLS.key
 val check_package_with_type_constraints: (* from Typemod *)
     (Location.t -> Env.t -> Types.module_type ->
      (Longident.t Asttypes.loc * Typedtree.core_type) list ->
-     Types.module_type) ref
+     Types.module_type) Domain.DLS.key

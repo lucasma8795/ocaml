@@ -49,7 +49,7 @@ val in_string : unit -> bool
 
 val is_keyword : string -> bool
 
-val print_warnings : bool ref
+val print_warnings : bool Domain.DLS.key
 val handle_docstrings: bool ref
 val comments : unit -> (string * Location.t) list
 val token_with_comments : Lexing.lexbuf -> Parser.token

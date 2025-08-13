@@ -20,6 +20,8 @@ open Types
 
 open Local_store
 
+module DLS = Domain.DLS
+
 (**** Sets, maps and hashtables of types ****)
 
 let wrap_repr f ty = f (Transient_expr.repr ty)
@@ -133,15 +135,15 @@ let rec pool_of_level level pool =
 
 (* Create a new pool at given level, and use it locally. *)
 let with_new_pool ~level f =
-  let pool = {level; pool = []; next = !pool_stack} in
+  let pool = {level; pool = []; next = DLS.get pool_stack} in
   let r =
-    Misc.protect_refs [ R(pool_stack, pool) ] f
+    Misc.protect_refs [ R'(pool_stack, pool) ] f
   in
   (r, pool.pool)
 
 let add_to_pool ~level ty =
   if level >= generic_level || level <= lowest_level then () else
-  let pool = pool_of_level level !pool_stack in
+  let pool = pool_of_level level (DLS.get pool_stack) in
   pool.pool <- ty :: pool.pool
 
 (**** Some type creators ****)
@@ -598,14 +600,14 @@ let memo = s_ref []
 
 let cleanup_abbrev () =
         (* Remove all memorized abbreviation expansions. *)
-  List.iter (fun abbr -> abbr := Mnil) !memo;
-  memo := []
+  List.iter (fun abbr -> abbr := Mnil) (DLS.get memo);
+  DLS.set memo []
 
 let memorize_abbrev mem priv path v v' =
         (* Memorize the expansion of an abbreviation. *)
   mem := Mcons (priv, path, v, v', !mem);
   (* check_expans [] v; *)
-  memo := mem :: !memo
+  DLS.set memo (mem :: (DLS.get memo))
 
 let rec forget_abbrev_rec mem path =
   match mem with

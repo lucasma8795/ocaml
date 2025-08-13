@@ -13,6 +13,8 @@
 (*                                                                        *)
 (**************************************************************************)
 
+module DLS = Domain.DLS
+
 (* Representation of types and declarations *)
 
 open Asttypes
@@ -472,8 +474,8 @@ let trail = Local_store.s_table ref Unchanged
 
 let log_change ch =
   let r' = ref Unchanged in
-  !trail := Change (ch, r');
-  trail := r'
+  DLS.get trail := Change (ch, r');
+  DLS.set trail r'
 
 (* constructor and accessors for [field_kind] *)
 
@@ -551,12 +553,12 @@ let type_marks =
   List.init (Sys.int_size - 27) (fun x -> 1 lsl (x + 27))
 let available_marks = Local_store.s_ref type_marks
 let with_type_mark f =
-  match !available_marks with
+  match DLS.get available_marks with
   | mark :: rem as old ->
-      available_marks := rem;
+      DLS.set available_marks rem;
       let mk = Mark {mark; marked = []} in
       Misc.try_finally (fun () -> f mk) ~always: begin fun () ->
-        available_marks := old;
+        DLS.set available_marks old;
         match mk with
         | Mark {marked} ->
             (* unmark marked type nodes *)
@@ -744,8 +746,8 @@ let new_id = Local_store.s_ref (-1)
 let create_expr = Transient_expr.create
 
 let proto_newty3 ~level ~scope desc  =
-  incr new_id;
-  create_expr desc ~level ~scope ~id:!new_id
+  DLS.set new_id (DLS.get new_id + 1);
+  create_expr desc ~level ~scope ~id:(DLS.get new_id)
 
                   (**********************************)
                   (*  Utilities for backtracking    *)
@@ -766,7 +768,7 @@ type snapshot = changes ref * int
 let last_snapshot = Local_store.s_ref 0
 
 let log_type ty =
-  if ty.id <= !last_snapshot then log_change (Ctype (ty, ty.desc))
+  if ty.id <= (DLS.get last_snapshot) then log_change (Ctype (ty, ty.desc))
 let link_type ty ty' =
   let ty = repr ty in
   let ty' = repr ty' in
@@ -802,7 +804,7 @@ let set_type_desc ty td =
 let set_level ty level =
   let ty = repr ty in
   if level <> ty.level then begin
-    if ty.id <= !last_snapshot then log_change (Clevel (ty, ty.level));
+    if ty.id <= (DLS.get last_snapshot) then log_change (Clevel (ty, ty.level));
     Transient_expr.set_level ty level
   end
 
@@ -811,7 +813,7 @@ let set_scope ty scope =
   let ty = repr ty in
   let prev_scope = ty.scope land scope_mask in
   if scope <> prev_scope then begin
-    if ty.id <= !last_snapshot then log_change (Cscope (ty, prev_scope));
+    if ty.id <= (DLS.get last_snapshot) then log_change (Cscope (ty, prev_scope));
     Transient_expr.set_scope ty scope
   end
 
@@ -862,9 +864,9 @@ let rec link_commu ~(inside : commutable) (c : commutable) =
 let set_commu_ok c = link_commu ~inside:c Cok
 
 let snapshot () =
-  let old = !last_snapshot in
-  last_snapshot := !new_id;
-  (!trail, old)
+  let old = DLS.get last_snapshot in
+  DLS.set last_snapshot (DLS.get new_id);
+  (DLS.get trail, old)
 
 let rec rev_log accu = function
     Unchanged -> accu
@@ -876,15 +878,15 @@ let rec rev_log accu = function
 
 let backtrack ~cleanup_abbrev (changes, old) =
   match !changes with
-    Unchanged -> last_snapshot := old
+    Unchanged -> DLS.set last_snapshot old
   | Invalid -> failwith "Types.backtrack"
   | Change _ as change ->
       cleanup_abbrev ();
       let backlog = rev_log [] change in
       List.iter undo_change backlog;
       changes := Unchanged;
-      last_snapshot := old;
-      trail := changes
+      DLS.set last_snapshot old;
+      DLS.set trail changes
 
 let undo_first_change_after (changes, _) =
   match !changes with

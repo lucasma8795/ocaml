@@ -293,7 +293,7 @@ let look_ahead ~print_warnings lb =
     }
   in
   Misc.protect_refs [
-      R (Lexer.print_warnings, print_warnings);
+      R' (Lexer.print_warnings, print_warnings);
       Location.(R (report_printer, fun () -> batch_mode_printer));
     ] (fun () -> Lexer.token shadow)
 ;;

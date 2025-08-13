@@ -17,6 +17,8 @@
 
 open Shape
 
+module DLS = Domain.DLS
+
 type result =
   | Resolved of Uid.t
   | Resolved_alias of Uid.t * result
@@ -282,8 +284,8 @@ end) = struct
     let env = {
       fuel;
       global_env;
-      reduce_memo_table = !reduce_memo_table;
-      read_back_memo_table = !read_back_memo_table;
+      reduce_memo_table = DLS.get reduce_memo_table;
+      read_back_memo_table = DLS.get read_back_memo_table;
       local_env;
     } in
     reduce_ env t |> read_back env
@@ -321,8 +323,8 @@ end) = struct
     let env = {
       fuel;
       global_env;
-      reduce_memo_table = !reduce_memo_table;
-      read_back_memo_table = !read_back_memo_table;
+      reduce_memo_table = DLS.get reduce_memo_table;
+      read_back_memo_table = DLS.get read_back_memo_table;
       local_env;
     } in
     let nf = reduce_ env t in

@@ -20,6 +20,8 @@ open Lexing
 open Misc
 open Parser
 
+module DLS = Domain.DLS
+
 type error =
   | Illegal_character of char
   | Illegal_escape of string * string option
@@ -173,9 +175,9 @@ let store_normalized_newline newline =
 (* To store the position of the beginning of a string and comment *)
 let string_start_loc = Local_store.s_ref Location.none
 let comment_start_loc = Local_store.s_ref []
-let in_comment () = !comment_start_loc <> []
+let in_comment () = DLS.get comment_start_loc <> []
 let is_in_string = Local_store.s_ref false
-let in_string () = !is_in_string
+let in_string () = DLS.get is_in_string
 let print_warnings = Local_store.s_ref true
 
 (* Escaped chars are interpreted in strings unless they are in comments. *)
@@ -198,18 +200,18 @@ let compute_quoted_string_idloc {Location.loc_start = orig_loc } shift id =
 let wrap_string_lexer f lexbuf =
   let loc_start = lexbuf.lex_curr_p in
   reset_string_buffer();
-  is_in_string := true;
+  DLS.set is_in_string true;
   let string_start = lexbuf.lex_start_p in
-  string_start_loc := Location.curr lexbuf;
+  DLS.set string_start_loc (Location.curr lexbuf);
   let loc_end = f lexbuf in
-  is_in_string := false;
+  DLS.set is_in_string false;
   lexbuf.lex_start_p <- string_start;
   let loc = Location.{loc_ghost= false; loc_start; loc_end} in
   get_stored_string (), loc
 
 let wrap_comment_lexer comment lexbuf =
   let start_loc = Location.curr lexbuf  in
-  comment_start_loc := [start_loc];
+  DLS.set comment_start_loc [start_loc];
   reset_string_buffer ();
   let end_loc = comment lexbuf in
   let s = get_stored_string () in
@@ -630,7 +632,7 @@ rule token = parse
         in
         COMMENT (s, loc) }
   | "(*)"
-      { if !print_warnings then
+      { if DLS.get print_warnings then
           Location.prerr_warning (Location.curr lexbuf) Warnings.Comment_start;
         let s, loc = wrap_comment_lexer comment lexbuf in
         COMMENT (s, loc) }
@@ -746,52 +748,52 @@ and directive = parse
       }
 and comment = parse
     "(*"
-      { comment_start_loc := (Location.curr lexbuf) :: !comment_start_loc;
+      { DLS.set comment_start_loc ((Location.curr lexbuf) :: DLS.get comment_start_loc);
         store_lexeme lexbuf;
         comment lexbuf
       }
   | "*)"
-      { match !comment_start_loc with
+      { match DLS.get comment_start_loc with
         | [] -> assert false
-        | [_] -> comment_start_loc := []; Location.curr lexbuf
-        | _ :: l -> comment_start_loc := l;
+        | [_] -> DLS.set comment_start_loc []; Location.curr lexbuf
+        | _ :: l -> DLS.set comment_start_loc l;
                   store_lexeme lexbuf;
                   comment lexbuf
        }
   | "\""
       {
-        string_start_loc := Location.curr lexbuf;
+        DLS.set string_start_loc (Location.curr lexbuf);
         store_string_char '\"';
-        is_in_string := true;
+        DLS.set is_in_string true;
         let _loc = try string lexbuf
         with Error (Unterminated_string, str_start) ->
-          match !comment_start_loc with
+          match DLS.get comment_start_loc with
           | [] -> assert false
           | loc :: _ ->
-            let start = List.hd (List.rev !comment_start_loc) in
-            comment_start_loc := [];
+            let start = List.hd (List.rev (DLS.get comment_start_loc)) in
+            DLS.set comment_start_loc [];
             error_loc loc (Unterminated_string_in_comment (start, str_start))
         in
-        is_in_string := false;
+        DLS.set is_in_string false;
         store_string_char '\"';
         comment lexbuf }
   | "{" ('%' '%'? extattrident blank*)? (delim_ext as raw_delim) "|"
       { match lax_delim raw_delim with
         | None -> store_lexeme lexbuf; comment lexbuf
         | Some delim ->
-        string_start_loc := Location.curr lexbuf;
+        DLS.set string_start_loc (Location.curr lexbuf);
         store_lexeme lexbuf;
-        is_in_string := true;
+        DLS.set is_in_string true;
         let _loc = try quoted_string delim lexbuf
         with Error (Unterminated_string, str_start) ->
-          match !comment_start_loc with
+          match DLS.get comment_start_loc with
           | [] -> assert false
           | loc :: _ ->
-            let start = List.hd (List.rev !comment_start_loc) in
-            comment_start_loc := [];
+            let start = List.hd (List.rev (DLS.get comment_start_loc)) in
+            DLS.set comment_start_loc [];
             error_loc loc (Unterminated_string_in_comment (start, str_start))
         in
-        is_in_string := false;
+        DLS.set is_in_string false;
         store_string_char '|';
         store_string delim;
         store_string_char '}';
@@ -816,11 +818,11 @@ and comment = parse
   | "\'\\" 'x' ['0'-'9' 'a'-'f' 'A'-'F'] ['0'-'9' 'a'-'f' 'A'-'F'] "\'"
       { store_lexeme lexbuf; comment lexbuf }
   | eof
-      { match !comment_start_loc with
+      { match DLS.get comment_start_loc with
         | [] -> assert false
         | loc :: _ ->
-          let start = List.hd (List.rev !comment_start_loc) in
-          comment_start_loc := [];
+          let start = List.hd (List.rev (DLS.get comment_start_loc)) in
+          DLS.set comment_start_loc [];
           error_loc loc (Unterminated_comment start)
       }
   | newline as nl
@@ -877,8 +879,8 @@ and string = parse
         string lexbuf
       }
   | eof
-      { is_in_string := false;
-        error_loc !string_start_loc Unterminated_string }
+      { DLS.set is_in_string false;
+        error_loc (DLS.get string_start_loc) Unterminated_string }
   | (_ as c)
       { store_string_char c;
         string lexbuf }
@@ -890,8 +892,8 @@ and quoted_string delim = parse
         quoted_string delim lexbuf
       }
   | eof
-      { is_in_string := false;
-        error_loc !string_start_loc Unterminated_string }
+      { DLS.set is_in_string false;
+        error_loc (DLS.get string_start_loc) Unterminated_string }
   | "|" (ident_ext? as raw_edelim) "}"
       {
         let edelim = validate_encoding lexbuf raw_edelim in
@@ -1007,8 +1009,8 @@ and skip_hash_bang = parse
 
   let init ?(keyword_edition=None,[]) () =
     populate_keywords keyword_edition;
-    is_in_string := false;
-    comment_start_loc := [];
+    DLS.set is_in_string false;
+    DLS.set comment_start_loc [];
     comment_list := [];
     match !preprocessor with
     | None -> ()

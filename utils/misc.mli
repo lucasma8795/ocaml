@@ -404,7 +404,9 @@ val delete_eol_spaces : string -> string
 
 (** {1 Operations on references} *)
 
-type ref_and_value = R : 'a ref * 'a -> ref_and_value
+type ref_and_value =
+  | R  : 'a ref * 'a -> ref_and_value
+  | R' : 'a Domain.DLS.key * 'a -> ref_and_value
 
 val protect_refs : ref_and_value list -> (unit -> 'a) -> 'a
 (** [protect_refs l f] temporarily sets [r] to [v] for each [R (r, v)] in [l]

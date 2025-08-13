@@ -23,11 +23,11 @@
 
 (** {1 Creators} *)
 
-val s_ref : 'a -> 'a ref
+val s_ref : 'a -> 'a Domain.DLS.key
 (** Similar to {!val:Stdlib.ref}, except the allocated reference is registered
     into the store. *)
 
-val s_table : ('a -> 'b) -> 'a -> 'b ref
+val s_table : ('a -> 'b) -> 'a -> 'b Domain.DLS.key
 (** Used to register hash tables. Those also need to be placed into refs to be
     easily swapped out, but one can't just "snapshot" the initial value to
     create fresh instances, so instead an initializer is required.
@@ -45,18 +45,14 @@ val s_table : ('a -> 'b) -> 'a -> 'b ref
 
 type store
 
+val freeze : unit -> unit
+
 val fresh : string -> store
 (** Returns a fresh instance of the store.
 
     The first time this function is called, it snapshots the value of all the
     registered references, later calls to [fresh] will return instances
     initialized to those values. *)
-
-val with_store : store -> (unit -> 'a) -> 'a
-(** [with_store s f] resets all the registered references to the value they have
-    in [s] for the run of [f].
-    If [f] updates any of the registered refs, [s] is updated to remember those
-    changes. *)
 
 val open_store : store -> unit
 

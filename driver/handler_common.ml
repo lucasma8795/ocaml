@@ -3,14 +3,14 @@ module Dir = Load_path.Dir
 
 type registry = string STbl.t
 
-let visible_files : registry ref = Local_store.s_table STbl.create 42
-let visible_files_uncap : registry ref = Local_store.s_table STbl.create 42
+let visible_files : registry ref = ref (STbl.create 42)
+let visible_files_uncap : registry ref = ref (STbl.create 42)
 
-let hidden_files : registry ref = Local_store.s_table STbl.create 42
-let hidden_files_uncap : registry ref = Local_store.s_table STbl.create 42
+let hidden_files : registry ref = ref (STbl.create 42)
+let hidden_files_uncap : registry ref = ref (STbl.create 42)
 
-let visible_dirs : Dir.t list ref = Local_store.s_ref []
-let hidden_dirs  : Dir.t list ref = Local_store.s_ref []
+let visible_dirs : Dir.t list ref = ref []
+let hidden_dirs  : Dir.t list ref = ref []
 
 let find_file_in_cache fn visible_files hidden_files =
   try (STbl.find !visible_files fn, Load_path.Visible) with

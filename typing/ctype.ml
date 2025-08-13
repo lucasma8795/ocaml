@@ -24,6 +24,8 @@ open Errortrace
 
 open Local_store
 
+module DLS = Domain.DLS
+
 (*
    General notes
    =============
@@ -177,23 +179,25 @@ let nongen_level = s_ref 0
 let global_level = s_ref 0
 let saved_level = s_ref []
 
-let get_current_level () = !current_level
-let init_def level = current_level := level; nongen_level := level
+let get_current_level () = DLS.get current_level
+let init_def level = DLS.set current_level level; DLS.set nongen_level level
 let begin_def () =
-  saved_level := (!current_level, !nongen_level) :: !saved_level;
-  incr current_level; nongen_level := !current_level
+  DLS.set saved_level ((DLS.get current_level, DLS.get nongen_level) :: DLS.get saved_level);
+  DLS.set current_level (DLS.get current_level + 1);
+  DLS.set nongen_level (DLS.get current_level)
 let begin_class_def () =
-  saved_level := (!current_level, !nongen_level) :: !saved_level;
-  incr current_level
+  DLS.set saved_level ((DLS.get current_level, DLS.get nongen_level) :: DLS.get saved_level);
+  DLS.set current_level (DLS.get current_level + 1)
+
 let raise_nongen_level () =
-  saved_level := (!current_level, !nongen_level) :: !saved_level;
-  nongen_level := !current_level
+  DLS.set saved_level ((DLS.get current_level, DLS.get nongen_level) :: DLS.get saved_level);
+  DLS.set nongen_level (DLS.get current_level)
 let end_def () =
-  let (cl, nl) = List.hd !saved_level in
-  saved_level := List.tl !saved_level;
-  current_level := cl; nongen_level := nl
+  let (cl, nl) = List.hd (DLS.get saved_level) in
+  DLS.set saved_level (List.tl (DLS.get saved_level));
+  DLS.set current_level cl; DLS.set nongen_level nl
 let create_scope () =
-  let level = !current_level + 1 in
+  let level = DLS.get current_level + 1 in
   init_def level;
   level
 
@@ -203,9 +207,9 @@ let wrap_end_def f = Misc.try_finally f ~always:end_def
    and automatic generalization through pools (cf. btype.ml) *)
 let with_local_level_gen ~begin_def ~structure ?before_generalize f =
   begin_def ();
-  let level = !current_level in
+  let level = DLS.get current_level in
   let result, pool =
-    with_new_pool ~level:!current_level begin fun () ->
+    with_new_pool ~level:(DLS.get current_level) begin fun () ->
       let result = wrap_end_def f in
       Option.iter (fun g -> g result) before_generalize;
       result
@@ -233,7 +237,7 @@ let with_local_level_gen ~begin_def ~structure ?before_generalize f =
            without introducing polymorphism.
            We do not check the scope here, as scope is only restricted for
            GADT equations, and they do not contain type variables. *)
-        if ty.level >= level then Transient_expr.set_level ty !current_level;
+        if ty.level >= level then Transient_expr.set_level ty (DLS.get current_level);
         add_to_pool ~level:ty.level ty
     | Tlink _ -> ()
         (* If a node is no longer used as representative, no need
@@ -306,25 +310,25 @@ let with_raised_nongen_level f =
 
 
 let reset_global_level () =
-  global_level := !current_level
+  DLS.set global_level (DLS.get current_level)
 let increase_global_level () =
-  let gl = !global_level in
-  global_level := !current_level;
+  let gl = DLS.get global_level in
+  DLS.set global_level (DLS.get current_level);
   gl
 let restore_global_level gl =
-  global_level := gl
+  DLS.set global_level gl
 
 (**** Some type creators ****)
 
 (* Re-export generic type creators *)
 
-let newty desc              = newty2 ~level:!current_level desc
-let new_scoped_ty scope desc = newty3 ~level:!current_level ~scope desc
+let newty desc              = newty2 ~level:(DLS.get current_level) desc
+let new_scoped_ty scope desc = newty3 ~level:(DLS.get current_level) ~scope desc
 
-let newvar ?name ()         = newty2 ~level:!current_level (Tvar name)
+let newvar ?name ()         = newty2 ~level:(DLS.get current_level) (Tvar name)
 let newvar2 ?name level     = newty2 ~level:level (Tvar name)
-let new_global_var ?name () = newty2 ~level:!global_level (Tvar name)
-let newstub ~scope          = newty3 ~level:!current_level ~scope (Tvar None)
+let new_global_var ?name () = newty2 ~level:(DLS.get global_level) (Tvar name)
+let newstub ~scope          = newty3 ~level:(DLS.get current_level) ~scope (Tvar None)
 
 let newobj fields      = newty (Tobject (fields, ref None))
 
@@ -778,7 +782,7 @@ let rec copy_spine copy_scope ty =
   | Tunivar _ -> ty
   | (Tarrow _ | Tpoly _ | Ttuple _ | Tpackage _ | Tconstr _) as desc ->
       let level = get_level ty in
-      if level < !current_level || level = generic_level then ty else
+      if level < DLS.get current_level || level = generic_level then ty else
       let t = newgenstub ~scope:(get_scope ty) in
       For_copy.redirect_desc copy_scope ty (Tsubst (t, None));
       let copy_rec = copy_spine copy_scope in
@@ -996,7 +1000,7 @@ let lower_variables_only env level ty =
 
 let lower_contravariant env ty =
   simple_abbrevs := Mnil;
-  lower_contravariant env !nongen_level (Hashtbl.create 7) false ty
+  lower_contravariant env (DLS.get nongen_level) (Hashtbl.create 7) false ty
 
 let rec generalize_class_type gen =
   function
@@ -1022,7 +1026,7 @@ let limited_generalize ty0 ~inside:ty =
     | Some parents -> parents := pty @ !parents
     | None ->
         let level = get_level ty in
-        if level > !current_level then begin
+        if level > DLS.get current_level then begin
           TypeHash.add graph ty (ref pty);
           (* XXX: why generic_level needs to be a root *)
           if (level = generic_level) || eq_type ty ty0 then
@@ -1040,7 +1044,7 @@ let limited_generalize ty0 ~inside:ty =
         Tvariant row ->
           let more = row_more row in
           let lv = get_level more in
-          if (TypeHash.mem graph more || lv > !current_level)
+          if (TypeHash.mem graph more || lv > DLS.get current_level)
               && lv <> generic_level then set_level more generic_level
       | _ -> ()
     end
@@ -1050,7 +1054,7 @@ let limited_generalize ty0 ~inside:ty =
   List.iter (generalize_parents ~is_root:true) !roots;
   TypeHash.iter
     (fun ty _ ->
-       if get_level ty <> generic_level then set_level ty !current_level)
+       if get_level ty <> generic_level then set_level ty (DLS.get current_level))
     graph
 
 let limited_generalize_class_type rv ~inside:cty =
@@ -1155,7 +1159,7 @@ let rec copy ?partial ?keep_names ?scope copy_scope ty =
         None -> assert false
       | Some (free_univars, keep) ->
           if TypeSet.is_empty (free_univars ty) then
-            if keep then level else !current_level
+            if keep then level else DLS.get current_level
           else generic_level
     in
     if forget <> generic_level then newty2 ~level:forget (Tvar None) else
@@ -1566,7 +1570,7 @@ let subst ~env ~level ?scope ~priv ~abbrev ?oty ~params ~args body =
 *)
 let apply ?(use_current_level = false) env params body args =
   simple_abbrevs := Mnil;
-  let level = if use_current_level then !current_level else generic_level in
+  let level = if use_current_level then DLS.get current_level else generic_level in
   try
     subst ~env ~level ~priv:Public ~abbrev:(ref Mnil) ~params ~args body
   with
@@ -4078,7 +4082,7 @@ let moregeneral env pat_sch subj_sch =
  *)
   with_level ~level:(subject_level - 1) begin fun () ->
     match with_local_level_generalize begin fun () ->
-      assert (!current_level = subject_level);
+      assert (DLS.get current_level = subject_level);
       (*
         Generic variables are first duplicated with [instance].  So,
         their levels are lowered to [subject_level].  The subject is
@@ -4600,7 +4604,7 @@ let match_class_types ?(trace=true) env pat_sch subj_sch =
        *)
       with_level ~level:(subject_level - 1) begin fun () ->
         with_local_level_generalize begin fun () ->
-          assert (!current_level = subject_level);
+          assert (DLS.get current_level = subject_level);
           (*
             Generic variables are first duplicated with [instance].  So,
             their levels are lowered to [subject_level].  The subject is
@@ -4808,7 +4812,7 @@ let rec build_subtype env (visited : transient_expr list)
           let cl_abbr, body = find_cltype_for_path env p in
           let ty =
             try
-              subst ~env ~level:!current_level ~priv:Public ~abbrev
+              subst ~env ~level:(DLS.get current_level) ~priv:Public ~abbrev
                 ~params:cl_abbr.type_params ~args:tl body
             with Cannot_subst -> assert false in
           let ty1, tl1 =

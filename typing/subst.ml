@@ -22,6 +22,8 @@ open Btype
 
 open Local_store
 
+module DLS = Domain.DLS
+
 type type_replacement =
   | Path of Path.t
   | Type_function of { params : type_expr list; body : type_expr }
@@ -148,12 +150,12 @@ let to_subst_by_type_function s p =
 (* Special type ids for saved signatures *)
 
 let new_id = s_ref (-1)
-let reset_for_saving () = new_id := -1
+let reset_for_saving () = DLS.set new_id (-1)
 
 let newpersty desc =
-  decr new_id;
+  DLS.set new_id (DLS.get new_id - 1);
   create_expr
-    desc ~level:generic_level ~scope:Btype.lowest_level ~id:!new_id
+    desc ~level:generic_level ~scope:Btype.lowest_level ~id:(DLS.get new_id)
 
 (* ensure that all occurrences of 'Tvar None' are physically shared *)
 let tvar_none = Tvar None

@@ -17,6 +17,8 @@
 
 exception Fatal_error
 
+module DLS = Domain.DLS
+
 let fatal_errorf fmt =
   Format.kfprintf
     (fun _ -> raise Fatal_error)
@@ -54,12 +56,20 @@ let reraise_preserving_backtrace e f =
   f ();
   Printexc.raise_with_backtrace e bt
 
-type ref_and_value = R : 'a ref * 'a -> ref_and_value
+type ref_and_value =
+  | R  : 'a ref * 'a -> ref_and_value
+  | R' : 'a Domain.DLS.key * 'a -> ref_and_value
 
 let protect_refs =
-  let set_refs l = List.iter (fun (R (r, v)) -> r := v) l in
+  let set_refs l = List.iter (function
+    | (R (r, v)) -> r := v
+    | (R' (k, v)) -> DLS.set k v
+  ) l in
   fun refs f ->
-    let backup = List.map (fun (R (r, _)) -> R (r, !r)) refs in
+    let backup = List.map (function
+      | (R (r, _)) -> R (r, !r)
+      | (R' (k, _)) -> R' (k, DLS.get k)
+    ) refs in
     set_refs refs;
     Fun.protect ~finally:(fun () -> set_refs backup) f
 

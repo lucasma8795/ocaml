@@ -27,6 +27,7 @@ let () = Includemod_errorprinter.register ()
 
 module Sig_component_kind = Shape.Sig_component_kind
 module String = Misc.Stdlib.String
+module DLS = Domain.DLS
 
 type hiding_error =
   | Illegal_shadowing of {
@@ -891,7 +892,7 @@ module Merge = struct
     Mtype.freshen ~scope (Mty_signature sg)
 
   let () =
-    Typetexp.check_package_with_type_constraints :=
+    DLS.set Typetexp.check_package_with_type_constraints
       check_package_with_type_constraints
 
   (* Helper for handling constraints on signatures: destructive constraints,
@@ -3261,8 +3262,8 @@ let type_str_item env pstri =
 let () =
   Typecore.type_module := type_module_alias;
   Typecore.type_str_item := type_str_item;
-  Typetexp.transl_modtype_longident := transl_modtype_longident;
-  Typetexp.transl_modtype := transl_modtype;
+  DLS.set Typetexp.transl_modtype_longident transl_modtype_longident;
+  DLS.set Typetexp.transl_modtype transl_modtype;
   Typecore.type_open := type_open_ ?toplevel:None;
   Typetexp.type_open := type_open_ ?toplevel:None;
   Typecore.type_open_decl := type_open_decl;

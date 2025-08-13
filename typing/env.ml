@@ -26,6 +26,7 @@ open Data_types
 open Local_store
 
 module String = Misc.Stdlib.String
+module DLS = Domain.DLS
 
 let add_delayed_check_forward = ref (fun _ -> assert false)
 
@@ -37,9 +38,9 @@ type 'a usage_tbl = ('a -> unit) Types.Uid.Tbl.t
     (inclusion test between signatures, cf Includemod.value_descriptions, ...).
 *)
 
-let value_declarations  : unit usage_tbl ref = s_table Types.Uid.Tbl.create 16
-let type_declarations   : unit usage_tbl ref = s_table Types.Uid.Tbl.create 16
-let module_declarations : unit usage_tbl ref = s_table Types.Uid.Tbl.create 16
+let value_declarations  : unit usage_tbl DLS.key = s_table Types.Uid.Tbl.create 16
+let type_declarations   : unit usage_tbl DLS.key = s_table Types.Uid.Tbl.create 16
+let module_declarations : unit usage_tbl DLS.key = s_table Types.Uid.Tbl.create 16
 
 type constructor_usage = Positive | Pattern | Exported_private | Exported
 type constructor_usages =
@@ -75,7 +76,7 @@ let constructor_usage_complaint ~rebind priv cu
       | false, false, true -> Some Only_exported_private
     end
 
-let used_constructors : constructor_usage usage_tbl ref =
+let used_constructors : constructor_usage usage_tbl DLS.key =
   s_table Types.Uid.Tbl.create 16
 
 type label_usage =
@@ -125,7 +126,7 @@ let label_usage_complaint priv mut lu
       | true, false, _ -> Some Not_mutated
     end
 
-let used_labels : label_usage usage_tbl ref =
+let used_labels : label_usage usage_tbl DLS.key =
   s_table Types.Uid.Tbl.create 16
 
 (** Map indexed by the name of module components. *)
@@ -819,17 +820,17 @@ module Current_unit : sig
     val is_path : Path.t -> bool
   end
 end = struct
-  let current_unit : Unit_info.t option ref = s_ref None
+  let current_unit : Unit_info.t option DLS.key = s_ref None
   let get () =
-    !current_unit
+    DLS.get current_unit
   let set cu =
-    current_unit := Some cu
+    DLS.set current_unit (Some cu)
   let unset () =
-    current_unit := None
+    DLS.set current_unit None
 
   module Name = struct
     let get () =
-      match !current_unit with
+      match DLS.get current_unit with
       | None -> ""
       | Some cu -> Unit_info.modname cu
     let is name =
@@ -952,58 +953,58 @@ let read_sign_of_cmi = sign_of_cmi ~freshen:true
 
 let save_sign_of_cmi = sign_of_cmi ~freshen:false
 
-let persistent_env : module_data Persistent_env.t ref =
+let persistent_env : module_data Persistent_env.t DLS.key =
   s_table Persistent_env.empty ()
 
 let without_cmis f x =
-  Persistent_env.without_cmis !persistent_env f x
+  Persistent_env.without_cmis (DLS.get persistent_env) f x
 
-let imports () = Persistent_env.imports !persistent_env
+let imports () = Persistent_env.imports (DLS.get persistent_env)
 
 let import_crcs ~source crcs =
-  Persistent_env.import_crcs !persistent_env ~source crcs
+  Persistent_env.import_crcs (DLS.get persistent_env) ~source crcs
 
 let read_pers_mod cmi =
-  Persistent_env.read !persistent_env read_sign_of_cmi cmi
+  Persistent_env.read (DLS.get persistent_env) read_sign_of_cmi cmi
 
 let find_pers_mod name =
-  Persistent_env.find !persistent_env read_sign_of_cmi name
+  Persistent_env.find (DLS.get persistent_env) read_sign_of_cmi name
 
 let check_pers_mod ~loc name =
-  Persistent_env.check !persistent_env read_sign_of_cmi ~loc name
+  Persistent_env.check (DLS.get persistent_env) read_sign_of_cmi ~loc name
 
 let crc_of_unit name =
-  Persistent_env.crc_of_unit !persistent_env read_sign_of_cmi name
+  Persistent_env.crc_of_unit (DLS.get persistent_env) read_sign_of_cmi name
 
 let is_imported_opaque modname =
-  Persistent_env.is_imported_opaque !persistent_env modname
+  Persistent_env.is_imported_opaque (DLS.get persistent_env) modname
 
 let register_import_as_opaque modname =
-  Persistent_env.register_import_as_opaque !persistent_env modname
+  Persistent_env.register_import_as_opaque (DLS.get persistent_env) modname
 
 let reset_declaration_caches () =
-  Types.Uid.Tbl.clear !value_declarations;
-  Types.Uid.Tbl.clear !type_declarations;
-  Types.Uid.Tbl.clear !module_declarations;
-  Types.Uid.Tbl.clear !used_constructors;
-  Types.Uid.Tbl.clear !used_labels;
+  Types.Uid.Tbl.clear (DLS.get value_declarations);
+  Types.Uid.Tbl.clear (DLS.get type_declarations);
+  Types.Uid.Tbl.clear (DLS.get module_declarations);
+  Types.Uid.Tbl.clear (DLS.get used_constructors);
+  Types.Uid.Tbl.clear (DLS.get used_labels);
   ()
 
 let reset_cache () =
   Current_unit.unset ();
-  Persistent_env.clear !persistent_env;
+  Persistent_env.clear (DLS.get persistent_env);
   reset_declaration_caches ();
   ()
 
 let reset_cache_toplevel () =
-  Persistent_env.clear_missing !persistent_env;
+  Persistent_env.clear_missing (DLS.get persistent_env);
   reset_declaration_caches ();
   ()
 
 (* get_components *)
 
 let get_components_res c =
-  match Persistent_env.can_load_cmis !persistent_env with
+  match Persistent_env.can_load_cmis (DLS.get persistent_env) with
   | Persistent_env.Can_load_cmis ->
     Lazy_backtrack.force !components_of_module_maker' c.comps
   | Persistent_env.Cannot_load_cmis log ->
@@ -1337,12 +1338,12 @@ let shape_or_leaf uid = function
   | Some shape -> shape
 
 let required_globals = s_ref []
-let reset_required_globals () = required_globals := []
-let get_required_globals () = !required_globals
+let reset_required_globals () = DLS.set required_globals []
+let get_required_globals () = DLS.get required_globals
 let add_required_global id =
   if Ident.global id && not !Clflags.no_alias_deps
-  && not (List.exists (Ident.same id) !required_globals)
-  then required_globals := id :: !required_globals
+  && not (List.exists (Ident.same id) (DLS.get required_globals))
+  then DLS.set required_globals (id :: (DLS.get required_globals))
 
 let rec normalize_module_path lax env = function
   | Pident id as path when lax && Ident.persistent id ->
@@ -1500,7 +1501,7 @@ let rec scrape_alias_for_visit env mty =
       match path with
       | Pident id
         when Ident.persistent id
-          && not (Persistent_env.looked_up !persistent_env (Ident.name id)) ->
+          && not (Persistent_env.looked_up (DLS.get persistent_env) (Ident.name id)) ->
           false
       | path -> (* PR#6600: find_module may raise Not_found *)
           try
@@ -1541,7 +1542,7 @@ let iter_env wrap proj1 proj2 f env () =
            iter_components (Pident id) path data.mda_components
        | Mod_persistent ->
            let modname = Ident.name id in
-           match Persistent_env.find_in_cache !persistent_env modname with
+           match Persistent_env.find_in_cache (DLS.get persistent_env) modname with
            | None -> ()
            | Some data ->
                iter_components (Pident id) path data.mda_components)
@@ -1562,7 +1563,7 @@ let same_types env1 env2 =
   env1.types == env2.types && env1.modules == env2.modules
 
 let used_persistent () =
-  Persistent_env.fold !persistent_env
+  Persistent_env.fold (DLS.get persistent_env)
     (fun s _m r -> String.Set.add s r)
     String.Set.empty
 
@@ -1931,7 +1932,7 @@ and store_value ?check id addr decl shape env =
   check_value_name (Ident.name id) decl.val_loc;
   Builtin_attributes.mark_alerts_used decl.val_attributes;
   Option.iter
-    (fun f -> check_usage decl.val_loc id decl.val_uid f !value_declarations)
+    (fun f -> check_usage decl.val_loc id decl.val_uid f (DLS.get value_declarations))
     check;
   let vda =
     { vda_description = decl;
@@ -1952,9 +1953,9 @@ and store_constructor ~check type_decl type_id cstr_id cstr env =
     let loc = cstr.cstr_loc in
     let k = cstr.cstr_uid in
     let priv = type_decl.type_private in
-    if not (Types.Uid.Tbl.mem !used_constructors k) then begin
+    if not (Types.Uid.Tbl.mem (DLS.get used_constructors) k) then begin
       let used = constructor_usages () in
-      Types.Uid.Tbl.add !used_constructors k
+      Types.Uid.Tbl.add (DLS.get used_constructors) k
         (add_constructor_usage used);
       if not (ty_name = "" || ty_name.[0] = '_')
       then
@@ -1988,9 +1989,9 @@ and store_label ~check type_decl type_id lbl_id lbl env =
     let loc = lbl.lbl_loc in
     let mut = lbl.lbl_mut in
     let k = lbl.lbl_uid in
-    if not (Types.Uid.Tbl.mem !used_labels k) then
+    if not (Types.Uid.Tbl.mem (DLS.get used_labels) k) then
       let used = label_usages () in
-      Types.Uid.Tbl.add !used_labels k
+      Types.Uid.Tbl.add (DLS.get used_labels) k
         (add_label_usage used);
       if not (ty_name = "" || ty_name.[0] = '_' || name.[0] = '_')
       then !add_delayed_check_forward
@@ -2014,7 +2015,7 @@ and store_type ~check id info shape env =
   if check then
     check_usage loc id info.type_uid
       (fun s -> Warnings.Unused_type_declaration (s, Warnings.Declaration))
-      !type_declarations;
+      (DLS.get type_declarations);
   let descrs, env =
     let path = Pident id in
     match info.type_kind with
@@ -2086,9 +2087,9 @@ and store_extension ~check ~rebind id addr ext shape env =
     let is_exception = Path.same ext.ext_type_path Predef.path_exn in
     let name = cstr.cstr_name in
     let k = cstr.cstr_uid in
-    if not (Types.Uid.Tbl.mem !used_constructors k) then begin
+    if not (Types.Uid.Tbl.mem (DLS.get used_constructors) k) then begin
       let used = constructor_usages () in
-      Types.Uid.Tbl.add !used_constructors k
+      Types.Uid.Tbl.add (DLS.get used_constructors) k
         (add_constructor_usage used);
       !add_delayed_check_forward
          (fun () ->
@@ -2110,7 +2111,7 @@ and store_module ?(update_summary=true) ~check
   let open Subst.Lazy in
   let loc = md.mdl_loc in
   Option.iter
-    (fun f -> check_usage loc id md.mdl_uid f !module_declarations) check;
+    (fun f -> check_usage loc id md.mdl_uid f (DLS.get module_declarations)) check;
   Builtin_attributes.mark_alerts_used md.mdl_attributes;
   let alerts = Builtin_attributes.alerts_of_attrs md.mdl_attributes in
   let comps =
@@ -2579,7 +2580,7 @@ let save_signature_with_transform cmi_transform ~alerts sg cmi_info =
   Subst.reset_for_saving ();
   let sg = Subst.signature Make_local (Subst.for_saving Subst.identity) sg in
   let cmi =
-    Persistent_env.make_cmi !persistent_env
+    Persistent_env.make_cmi (DLS.get persistent_env)
       (Unit_info.Artifact.modname cmi_info) sg alerts
     |> cmi_transform in
   let filename = Unit_info.Artifact.filename cmi_info in
@@ -2587,7 +2588,7 @@ let save_signature_with_transform cmi_transform ~alerts sg cmi_info =
     Persistent_env.Persistent_signature.{ cmi; filename; visibility = Visible }
   in
   let pm = save_sign_of_cmi pers_sig in
-  Persistent_env.save_cmi !persistent_env pers_sig pm;
+  Persistent_env.save_cmi (DLS.get persistent_env) pers_sig pm;
   cmi
 
 let save_signature ~alerts sg cmi =
@@ -2607,19 +2608,19 @@ let initial =
 (* Tracking usage *)
 
 let mark_module_used uid =
-  match Types.Uid.Tbl.find !module_declarations uid with
+  match Types.Uid.Tbl.find (DLS.get module_declarations) uid with
   | mark -> mark ()
   | exception Not_found -> ()
 
 let mark_modtype_used _uid = ()
 
 let mark_value_used uid =
-  match Types.Uid.Tbl.find !value_declarations uid with
+  match Types.Uid.Tbl.find (DLS.get value_declarations) uid with
   | mark -> mark ()
   | exception Not_found -> ()
 
 let mark_type_used uid =
-  match Types.Uid.Tbl.find !type_declarations uid with
+  match Types.Uid.Tbl.find (DLS.get type_declarations) uid with
   | mark -> mark ()
   | exception Not_found -> ()
 
@@ -2629,24 +2630,24 @@ let mark_type_path_used env path =
   | exception Not_found -> ()
 
 let mark_constructor_used usage uid =
-  match Types.Uid.Tbl.find !used_constructors uid with
+  match Types.Uid.Tbl.find (DLS.get used_constructors) uid with
   | mark -> mark usage
   | exception Not_found -> ()
 
 let mark_extension_used usage uid =
-  match Types.Uid.Tbl.find !used_constructors uid with
+  match Types.Uid.Tbl.find (DLS.get used_constructors) uid with
   | mark -> mark usage
   | exception Not_found -> ()
 
 let mark_label_used usage uid =
-  match Types.Uid.Tbl.find !used_labels uid with
+  match Types.Uid.Tbl.find (DLS.get used_labels) uid with
   | mark -> mark usage
   | exception Not_found -> ()
 
 let mark_constructor_description_used usage env cstr =
   let ty_path = cstr_res_type_path cstr in
   mark_type_path_used env ty_path;
-  match Types.Uid.Tbl.find !used_constructors cstr.cstr_uid with
+  match Types.Uid.Tbl.find (DLS.get used_constructors) cstr.cstr_uid with
   | mark -> mark usage
   | exception Not_found -> ()
 
@@ -2657,30 +2658,30 @@ let mark_label_description_used usage env lbl =
     | _ -> assert false
   in
   mark_type_path_used env ty_path;
-  match Types.Uid.Tbl.find !used_labels lbl.lbl_uid with
+  match Types.Uid.Tbl.find (DLS.get used_labels) lbl.lbl_uid with
   | mark -> mark usage
   | exception Not_found -> ()
 
 let mark_class_used uid =
-  match Types.Uid.Tbl.find !type_declarations uid with
+  match Types.Uid.Tbl.find (DLS.get type_declarations) uid with
   | mark -> mark ()
   | exception Not_found -> ()
 
 let mark_cltype_used uid =
-  match Types.Uid.Tbl.find !type_declarations uid with
+  match Types.Uid.Tbl.find (DLS.get type_declarations) uid with
   | mark -> mark ()
   | exception Not_found -> ()
 
 let set_value_used_callback vd callback =
-  Types.Uid.Tbl.add !value_declarations vd.val_uid callback
+  Types.Uid.Tbl.add (DLS.get value_declarations) vd.val_uid callback
 
 let set_type_used_callback td callback =
   if Uid.for_actual_declaration td.type_uid then
     let old =
-      try Types.Uid.Tbl.find !type_declarations td.type_uid
+      try Types.Uid.Tbl.find (DLS.get type_declarations) td.type_uid
       with Not_found -> ignore
     in
-    Types.Uid.Tbl.replace !type_declarations td.type_uid
+    Types.Uid.Tbl.replace (DLS.get type_declarations) td.type_uid
       (fun () -> callback old)
 
 (* Lookup by name *)
@@ -3403,7 +3404,7 @@ let fold_modules f lid env acc =
                in
                f name p md acc
            | Mod_persistent ->
-               match Persistent_env.find_in_cache !persistent_env name with
+               match Persistent_env.find_in_cache (DLS.get persistent_env) name with
                | None -> acc
                | Some mda ->
                    let md =
@@ -3467,7 +3468,7 @@ let filter_non_loaded_persistent f env =
          | Mod_local _ -> acc
          | Mod_unbound _ -> acc
          | Mod_persistent ->
-             match Persistent_env.find_in_cache !persistent_env name with
+             match Persistent_env.find_in_cache (DLS.get persistent_env) name with
              | Some _ -> acc
              | None ->
                  if f (Ident.create_persistent name) then
@@ -3522,7 +3523,7 @@ let last_env = s_ref empty
 let last_reduced_env = s_ref empty
 
 let keep_only_summary env =
-  if !last_env == env then !last_reduced_env
+  if DLS.get last_env == env then DLS.get last_reduced_env
   else begin
     let new_env =
       {
@@ -3532,8 +3533,8 @@ let keep_only_summary env =
        flags = env.flags;
       }
     in
-    last_env := env;
-    last_reduced_env := new_env;
+    DLS.set last_env env;
+    DLS.set last_reduced_env new_env;
     new_env
   end
 

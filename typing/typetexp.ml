@@ -24,6 +24,8 @@ open Types
 open Ctype
 open Local_store
 
+module DLS = Domain.DLS
+
 exception Already_bound
 
 type error =
@@ -160,21 +162,21 @@ end = struct
 
   let reset () =
     reset_global_level ();
-    type_variables := TyVarMap.empty
+    DLS.set type_variables TyVarMap.empty
 
   let is_in_scope name =
-    TyVarMap.mem name !type_variables
+    TyVarMap.mem name (DLS.get type_variables)
 
   let add ?(unused = ref false) name v =
     assert (not_generic v);
-    type_variables := TyVarMap.add name (v, unused) !type_variables
+    DLS.set type_variables (TyVarMap.add name (v, unused) (DLS.get type_variables))
 
   let narrow () =
-    (increase_global_level (), !type_variables)
+    (increase_global_level (), DLS.get type_variables)
 
   let widen (gl, tv) =
     restore_global_level gl;
-    type_variables := tv
+    DLS.set type_variables tv
 
   let with_local_scope f =
    let context = narrow () in
@@ -184,7 +186,7 @@ end = struct
 
   (* throws Not_found if the variable is not in scope *)
   let lookup_global_type_variable name =
-    let (v, unused) = TyVarMap.find name !type_variables in
+    let (v, unused) = TyVarMap.find name (DLS.get type_variables) in
     unused := false;
     v
 
@@ -192,18 +194,18 @@ end = struct
     let add_name name _ l =
       if name = "_" then l else Pprintast.tyvar_of_name name :: l
     in
-    TyVarMap.fold add_name !type_variables []
+    TyVarMap.fold add_name (DLS.get type_variables) []
 
   (*****)
   type poly_univars = (string * pending_univar) list
 
   let with_univars new_ones f =
     assert_univars new_ones;
-    let old_univars = !univars in
-    univars := new_ones @ !univars;
+    let old_univars = DLS.get univars in
+    DLS.set univars (new_ones @ DLS.get univars);
     Fun.protect
       f
-      ~finally:(fun () -> univars := old_univars)
+      ~finally:(fun () -> DLS.set univars old_univars)
 
   let make_poly_univars vars =
     let make name = { univar=newvar ~name (); associated = [] } in
@@ -255,8 +257,8 @@ end = struct
   (*****)
   let reset_locals ?univars:(uvs=[]) () =
     assert_univars uvs;
-    univars := uvs;
-    used_variables := TyVarMap.empty
+    DLS.set univars uvs;
+    DLS.set used_variables TyVarMap.empty
 
   let associate row_context p =
     let add l x = if List.memq x l then l else x :: l in
@@ -265,11 +267,11 @@ end = struct
   (* throws Not_found if the variable is not in scope *)
   let lookup_local ~row_context name =
     try
-      let p = List.assoc name !univars in
+      let p = List.assoc name (DLS.get univars) in
       associate row_context p;
       p.univar
     with Not_found ->
-      let (v, _, unused) = TyVarMap.find name !used_variables in
+      let (v, _, unused) = TyVarMap.find name (DLS.get used_variables) in
       unused := false;
       instance v
       (* This call to instance might be redundant; all variables
@@ -291,7 +293,7 @@ end = struct
         unused
       | _ -> ref false
     in
-    used_variables := TyVarMap.add name (v, loc, unused) !used_variables
+    DLS.set used_variables (TyVarMap.add name (v, loc, unused) (DLS.get used_variables))
 
 
   type flavor = Unification | Universal
@@ -305,13 +307,13 @@ end = struct
   let add_pre_univar tv = function
     | { flavor = Universal } ->
       assert (not_generic tv);
-      pre_univars := tv :: !pre_univars
+      DLS.set pre_univars (tv :: DLS.get pre_univars)
     | _ -> ()
 
   let collect_univars f =
-    pre_univars := [];
+    DLS.set pre_univars [];
     let result = f () in
-    let univs = promote_generics_to_univars [] !pre_univars in
+    let univs = promote_generics_to_univars [] (DLS.get pre_univars) in
     result, univs
 
   let new_var ?name policy =
@@ -347,8 +349,8 @@ end = struct
               let v2 = new_global_var () in
               r := (loc, v, v2) :: !r;
               add ~unused name v2)
-      !used_variables;
-    used_variables := TyVarMap.empty;
+      (DLS.get used_variables);
+    DLS.set used_variables TyVarMap.empty;
     fun () ->
       List.iter
         (function (loc, t1, t2) ->
@@ -780,16 +782,16 @@ and transl_package env ~policy ~row_context ptyp =
   let loc = ptyp.ppt_loc in
   let l = sort_constraints_no_duplicates loc env ptyp.ppt_cstrs in
   let mty = Ast_helper.Mty.mk ~loc (Pmty_ident ptyp.ppt_path) in
-  let mty = TyVarEnv.with_local_scope (fun () -> !transl_modtype env mty) in
+  let mty = TyVarEnv.with_local_scope (fun () -> (DLS.get transl_modtype) env mty) in
   let ptys =
     List.map (fun (s, pty) -> s, transl_type env ~policy ~row_context pty) l
   in
   let mty =
     if ptys <> [] then
-      !check_package_with_type_constraints loc env mty.mty_type ptys
+      (DLS.get check_package_with_type_constraints) loc env mty.mty_type ptys
     else mty.mty_type
   in
-  let path = !transl_modtype_longident loc env ptyp.ppt_path.txt in
+  let path = (DLS.get transl_modtype_longident) loc env ptyp.ppt_path.txt in
   path, mty, ptys
 
 (* Make the rows "fixed" in this type, to make universal check easier *)

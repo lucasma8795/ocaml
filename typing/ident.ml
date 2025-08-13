@@ -15,6 +15,8 @@
 
 open Local_store
 
+module DLS = Domain.DLS
+
 let lowest_scope  = 0
 let highest_scope = 100_000_000
   (* assumed to fit in 27 bits, see Types.scope_field *)
@@ -42,16 +44,16 @@ let currentstamp = s_ref 0
 let predefstamp = s_ref 0
 
 let create_scoped ~scope s =
-  incr currentstamp;
-  Scoped { name = s; stamp = !currentstamp; scope }
+  DLS.set currentstamp (DLS.get currentstamp + 1);
+  Scoped { name = s; stamp = DLS.get currentstamp; scope }
 
 let create_local s =
-  incr currentstamp;
-  Local { name = s; stamp = !currentstamp }
+  DLS.set currentstamp (DLS.get currentstamp + 1);
+  Local { name = s; stamp = DLS.get currentstamp }
 
 let create_predef s =
-  incr predefstamp;
-  Predef { name = s; stamp = !predefstamp }
+  DLS.set predefstamp (DLS.get predefstamp + 1);
+  Predef { name = s; stamp = DLS.get predefstamp }
 
 let create_persistent s =
   Global s
@@ -65,8 +67,8 @@ let name = function
 let rename = function
   | Local { name; stamp = _ }
   | Scoped { name; stamp = _; scope = _ } ->
-      incr currentstamp;
-      Local { name; stamp = !currentstamp }
+      DLS.set currentstamp (DLS.get currentstamp + 1);
+      Local { name; stamp = DLS.get currentstamp }
   | id ->
       Misc.fatal_errorf "Ident.rename %s" (name id)
 
@@ -133,8 +135,8 @@ let reinit_level = ref (-1)
 
 let reinit () =
   if !reinit_level < 0
-  then reinit_level := !currentstamp
-  else currentstamp := !reinit_level
+  then reinit_level := DLS.get currentstamp
+  else DLS.set currentstamp !reinit_level
 
 let global = function
   | Local _
@@ -150,15 +152,15 @@ let canonical_stamps = s_table Hashtbl.create 0
 let next_canonical_stamp = s_table Hashtbl.create 0
 
 let canonicalize name stamp =
-  try Hashtbl.find !canonical_stamps (name, stamp)
+  try Hashtbl.find (DLS.get canonical_stamps) (name, stamp)
   with Not_found ->
     let canonical_stamp =
-      try Hashtbl.find !next_canonical_stamp name
+      try Hashtbl.find (DLS.get next_canonical_stamp) name
       with Not_found -> 0
     in
-    Hashtbl.replace !next_canonical_stamp name
+    Hashtbl.replace (DLS.get next_canonical_stamp) name
       (canonical_stamp + 1);
-    Hashtbl.add !canonical_stamps (name, stamp)
+    Hashtbl.add (DLS.get canonical_stamps) (name, stamp)
       canonical_stamp;
     canonical_stamp
 
