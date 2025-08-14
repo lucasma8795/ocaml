@@ -18,6 +18,8 @@
    - man/ocamlc.m
 *)
 
+module DLS = Domain.DLS
+
 type loc = {
   loc_start: Lexing.position;
   loc_end: Lexing.position;
@@ -603,37 +605,36 @@ type state =
   }
 
 let current =
-  ref
-    {
-      active = Array.make (last_warning_number + 1) true;
-      error = Array.make (last_warning_number + 1) false;
-      alerts = (Misc.Stdlib.String.Set.empty, false);
-      alert_errors = (Misc.Stdlib.String.Set.empty, true); (* all soft *)
-    }
+  DLS.new_key (fun () -> {
+    active = Array.make (last_warning_number + 1) true;
+    error = Array.make (last_warning_number + 1) false;
+    alerts = (Misc.Stdlib.String.Set.empty, false);
+    alert_errors = (Misc.Stdlib.String.Set.empty, true); (* all soft *)
+  })
 
-let disabled = ref false
+let disabled = DLS.new_key (fun () -> false)
 
 let without_warnings f =
-  Misc.protect_refs [Misc.R(disabled, true)] f
+  Misc.protect_refs [Misc.R' (disabled, true)] f
 
-let backup () = !current
+let backup () = DLS.get current
 
-let restore x = current := x
+let restore x = DLS.set current x
 
 let is_active x =
-  not !disabled && (!current).active.(number x)
+  not (DLS.get disabled) && (DLS.get current).active.(number x)
 
 let is_error x =
-  not !disabled && (!current).error.(number x)
+  not (DLS.get disabled) && (DLS.get current).error.(number x)
 
 let alert_is_active {kind; _} =
-  not !disabled &&
-  let (set, pos) = (!current).alerts in
+  not (DLS.get disabled) &&
+  let (set, pos) = (DLS.get current).alerts in
   Misc.Stdlib.String.Set.mem kind set = pos
 
 let alert_is_error {kind; _} =
-  not !disabled &&
-  let (set, pos) = (!current).alert_errors in
+  not (DLS.get disabled) &&
+  let (set, pos) = (DLS.get current).alert_errors in
   Misc.Stdlib.String.Set.mem kind set = pos
 
 let with_state state f =
@@ -658,7 +659,7 @@ let set_alert ~error ~enable s =
         (Misc.Stdlib.String.Set.empty, not enable)
     | s ->
         let (set, pos) =
-          if error then (!current).alert_errors else (!current).alerts
+          if error then (DLS.get current).alert_errors else (DLS.get current).alerts
         in
         let f =
           if enable = pos
@@ -668,9 +669,9 @@ let set_alert ~error ~enable s =
         (f s set, pos)
   in
   if error then
-    current := {(!current) with alert_errors=upd}
+    DLS.set current {(DLS.get current) with alert_errors=upd}
   else
-    current := {(!current) with alerts=upd}
+    DLS.set current {(DLS.get current) with alerts=upd}
 
 let parse_alert_option s =
   let n = String.length s in
@@ -874,10 +875,10 @@ let parse_opt error active errflag s =
       end
 
 let parse_options errflag s =
-  let error = Array.copy (!current).error in
-  let active = Array.copy (!current).active in
+  let error = Array.copy (DLS.get current).error in
+  let active = Array.copy (DLS.get current).active in
   let alerts = parse_opt error active errflag s in
-  current := {(!current) with error; active};
+  DLS.set current {(DLS.get current) with error; active};
   alerts
 
 (* If you change these, don't forget to change them in man/ocamlc.m *)
@@ -1264,7 +1265,7 @@ let message = function
         Style.inline_code ".."
 ;;
 
-let nerrors = ref 0
+let nerrors = DLS.new_key (fun () -> 0)
 
 type reporting_information =
   { id : string
@@ -1285,7 +1286,7 @@ let report w =
   match is_active w with
   | false -> `Inactive
   | true ->
-     if is_error w then incr nerrors;
+     if is_error w then DLS.set nerrors (DLS.get nerrors + 1);
      `Active
        { id = id_name w;
          message = message w;
@@ -1298,7 +1299,7 @@ let report_alert (alert : alert) =
   | false -> `Inactive
   | true ->
       let is_error = alert_is_error alert in
-      if is_error then incr nerrors;
+      if is_error then DLS.set nerrors (DLS.get nerrors + 1);
       let message = msg "%s" (Misc.normalise_eol alert.message) in
        (* Reduce \r\n to \n:
            - Prevents any \r characters being printed on Unix when processing
@@ -1326,12 +1327,12 @@ let report_alert (alert : alert) =
 exception Errors
 
 let reset_fatal () =
-  nerrors := 0
+  DLS.set nerrors 0
 
 let check_fatal () =
-  if !nerrors > 0 then begin
-    nerrors := 0;
-    raise Errors;
+  if DLS.get nerrors > 0 then begin
+    DLS.set nerrors 0;
+    raise Errors
   end
 
 let pp_since out release_info =

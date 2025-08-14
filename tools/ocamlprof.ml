@@ -19,6 +19,8 @@ open Printf
 open Location
 open Parsetree
 
+module DLS = Domain.DLS
+
 (* User programs must not use identifiers that start with these prefixes. *)
 let idprefix = "__ocaml_prof_"
 let modprefix = "OCAML__prof_"
@@ -405,7 +407,7 @@ and rewrite_str_item iflag item =
 let rewrite_file srcfile add_function =
   inchan := open_in_bin srcfile;
   let lb = Lexing.from_channel !inchan in
-  Location.input_name := srcfile;
+  DLS.set Location.input_name srcfile;
   Location.init lb srcfile;
   List.iter (rewrite_str_item false) (Parse.implementation lb);
   final_rewrite add_function;

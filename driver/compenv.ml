@@ -15,6 +15,8 @@
 
 open Clflags
 
+module DLS = Domain.DLS
+
 exception Exit_with_status of int
 
 let output_prefix name =
@@ -663,7 +665,7 @@ let process_action ctx action =
       if !make_package then objfiles := (opref ^ ".cmi") :: !objfiles
   | ProcessCFile name ->
       readenv ppf (Before_compile name);
-      Location.input_name := name;
+      DLS.set Location.input_name name;
       let obj_name = match !output_name with
         | None -> c_object_of_filename name
         | Some n -> n
@@ -691,7 +693,7 @@ let process_action ctx action =
       else
         match Compiler_pass.of_input_filename name with
         | Some start_from ->
-          Location.input_name := name;
+          DLS.set Location.input_name name;
           impl ~start_from name
         | None -> raise(Arg.Bad("Don't know what to do with " ^ name))
 

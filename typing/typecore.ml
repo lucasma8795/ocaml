@@ -28,6 +28,7 @@ open Btype
 open Ctype
 
 module Style = Misc.Style
+module DLS = Domain.DLS
 
 type type_forcing_context =
   | If_conditional
@@ -2746,10 +2747,10 @@ let check_unused
 
 (** Some delayed checks, to be executed after typing the whole
     compilation unit or toplevel phrase *)
-let delayed_checks = ref []
-let reset_delayed_checks () = delayed_checks := []
+let delayed_checks = Local_store.s_ref []
+let reset_delayed_checks () = DLS.set delayed_checks []
 let add_delayed_check f =
-  delayed_checks := (f, Warnings.backup ()) :: !delayed_checks
+  DLS.set delayed_checks ((f, Warnings.backup ()) :: (DLS.get delayed_checks))
 
 let force_delayed_checks () =
   (* checks may change type levels *)
@@ -2757,7 +2758,7 @@ let force_delayed_checks () =
   let w_old = Warnings.backup () in
   List.iter
     (fun (f, w) -> Warnings.restore w; f ())
-    (List.rev !delayed_checks);
+    (List.rev (DLS.get delayed_checks));
   Warnings.restore w_old;
   reset_delayed_checks ();
   Btype.backtrack snap

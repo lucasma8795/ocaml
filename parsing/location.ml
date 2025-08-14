@@ -15,6 +15,8 @@
 
 open Lexing
 
+module DLS = Domain.DLS
+
 type t = Warnings.loc =
   { loc_start: position; loc_end: position; loc_ghost: bool }
 
@@ -76,18 +78,18 @@ let mknoloc txt = mkloc txt none
 (******************************************************************************)
 (* Input info *)
 
-let input_name = ref "_none_"
-let input_lexbuf = ref (None : lexbuf option)
-let input_phrase_buffer = ref (None : Buffer.t option)
+let input_name = DLS.new_key (fun () -> "_none_")
+let input_lexbuf : lexbuf option DLS.key = DLS.new_key (fun () -> None)
+let input_phrase_buffer :  Buffer.t option DLS.key = DLS.new_key (fun () -> None)
 
 (******************************************************************************)
 (* Terminal info *)
 
-let status = ref Terminfo.Uninitialised
+let status = DLS.new_key (fun () -> Terminfo.Uninitialised)
 
 let setup_terminal () =
-  if !status = Terminfo.Uninitialised then
-    status := Terminfo.setup stdout
+  if DLS.get status = Terminfo.Uninitialised then
+    DLS.set status (Terminfo.setup stdout)
 
 (* The number of lines already printed after input.
 
@@ -98,7 +100,7 @@ let setup_terminal () =
 
    We also use for {!is_first_report}, see below.
 *)
-let num_loc_lines = ref 0
+let num_loc_lines = DLS.new_key (fun () -> 0)
 
 (* We use [num_loc_lines] to determine if the report about to be
    printed is the first or a follow-up report of the current
@@ -107,16 +109,16 @@ let num_loc_lines = ref 0
    a blank line between messages of the same batch.
 *)
 let is_first_message () =
-  !num_loc_lines = 0
+  DLS.get num_loc_lines = 0
 
 (* This is used by the toplevel to reset [num_loc_lines] before each phrase *)
 let reset () =
-  num_loc_lines := 0
+  DLS.set num_loc_lines 0
 
 (* This is used by the toplevel *)
 let echo_eof () =
   print_newline ();
-  incr num_loc_lines
+  DLS.set num_loc_lines (DLS.get num_loc_lines + 1)
 
 (* Code printing errors and warnings must be wrapped using this function, in
    order to update [num_loc_lines].
@@ -131,7 +133,7 @@ let print_updating_num_loc_lines ppf f arg =
       if i = start + len then c
       else if String.get str i = '\n' then count (succ i) (succ c)
       else count (succ i) c in
-    num_loc_lines := !num_loc_lines + count start 0 ;
+    DLS.set num_loc_lines (DLS.get num_loc_lines + count start 0);
     out_functions.out_string str start len in
   pp_set_formatter_out_functions ppf
     { out_functions with out_string } ;
@@ -206,7 +208,7 @@ module Doc = struct
   let separate_new_message ppf () =
     if not (is_first_message ()) then begin
       Fmt.pp_print_newline ppf ();
-      incr num_loc_lines
+      DLS.set num_loc_lines (DLS.get num_loc_lines + 1)
     end
 
   let filename ppf file =
@@ -234,7 +236,7 @@ module Doc = struct
     let file =
       (* According to the comment in location.mli, if [pos_fname] is "", we must
          use [!input_name]. *)
-      if loc.loc_start.pos_fname = "" then !input_name
+      if loc.loc_start.pos_fname = "" then (DLS.get input_name)
       else loc.loc_start.pos_fname
     in
     let startline = loc.loc_start.pos_lnum in
@@ -382,7 +384,7 @@ let highlight_terminfo lb ppf locs =
   (* Do nothing if the buffer does not contain the whole phrase. *)
   if pos0 < 0 then raise Exit;
   (* Count number of lines in phrase *)
-  let lines = ref !num_loc_lines in
+  let lines = ref (DLS.get num_loc_lines) in
   for i = pos0 to lb.lex_buffer_len - 1 do
     if Bytes.get lb.lex_buffer i = '\n' then incr lines
   done;
@@ -406,7 +408,7 @@ let highlight_terminfo lb ppf locs =
   (* Make sure standout mode is over *)
   Terminfo.standout stdout false;
   (* Position cursor back to original location *)
-  Terminfo.resume stdout !num_loc_lines;
+  Terminfo.resume stdout (DLS.get num_loc_lines);
   flush stdout
 
 let highlight_terminfo lb ppf locs =
@@ -635,7 +637,7 @@ let lines_around_from_phrasebuf
 (* A [get_lines] function for [highlight_quote] that reads from the current
    input. *)
 let lines_around_from_current_input ~start_pos ~end_pos =
-  match !input_lexbuf, !input_phrase_buffer, !input_name with
+  match DLS.get input_lexbuf, DLS.get input_phrase_buffer, DLS.get input_name with
   | _, Some pb, "//toplevel//" ->
       lines_around_from_phrasebuf pb ~start_pos ~end_pos
   | Some lb, _, _ ->
@@ -712,8 +714,8 @@ let is_dummy_loc loc =
 *)
 let is_quotable_loc loc =
   not (is_dummy_loc loc)
-  && loc.loc_start.pos_fname = !input_name
-  && loc.loc_end.pos_fname = !input_name
+  && loc.loc_start.pos_fname = DLS.get input_name
+  && loc.loc_end.pos_fname = DLS.get input_name
 
 let error_style () =
   match !Clflags.error_style with
@@ -839,7 +841,7 @@ let terminfo_toplevel_printer (lb: lexbuf): report_printer =
 
 let best_toplevel_printer () =
   setup_terminal ();
-  match !status, !input_lexbuf with
+  match DLS.get status, DLS.get input_lexbuf with
   | Terminfo.Good_term, Some lb ->
       terminfo_toplevel_printer lb
   | _, _ ->
@@ -847,15 +849,15 @@ let best_toplevel_printer () =
 
 (* Creates a printer for the current input *)
 let default_report_printer () : report_printer =
-  if !input_name = "//toplevel//" then
+  if DLS.get input_name = "//toplevel//" then
     best_toplevel_printer ()
   else
     batch_mode_printer
 
-let report_printer = ref default_report_printer
+let report_printer = DLS.new_key (fun () -> default_report_printer)
 
 let print_report ppf report =
-  let printer = !report_printer () in
+  let printer = (DLS.get report_printer) () in
   printer.pp printer ppf report
 
 (******************************************************************************)
@@ -890,7 +892,7 @@ let error_of_printer ?(loc = none) ?(sub = []) ?(footnote=Fun.const None) pp x =
   mkerror loc sub footnote (Fmt.doc_printf "%a" pp x)
 
 let error_of_printer_file print x =
-  error_of_printer ~loc:(in_file !input_name) print x
+  error_of_printer ~loc:(in_file (DLS.get input_name)) print x
 
 (******************************************************************************)
 (* Reporting warnings: generating a report from a warning number using the
@@ -916,17 +918,17 @@ let default_warning_reporter =
        else Report_warning id
     )
 
-let warning_reporter = ref default_warning_reporter
-let report_warning loc w = !warning_reporter loc w
+let warning_reporter = DLS.new_key (fun () -> default_warning_reporter)
+let report_warning loc w = (DLS.get warning_reporter) loc w
 
-let formatter_for_warnings = ref Format.err_formatter
+let formatter_for_warnings = DLS.new_key (fun () -> Format.err_formatter)
 
 let print_warning loc ppf w =
   match report_warning loc w with
   | None -> ()
   | Some report -> print_report ppf report
 
-let prerr_warning loc w = print_warning loc !formatter_for_warnings w
+let prerr_warning loc w = print_warning loc (DLS.get formatter_for_warnings) w
 
 let default_alert_reporter =
   default_warning_alert_reporter
@@ -936,15 +938,15 @@ let default_alert_reporter =
        else Report_alert id
     )
 
-let alert_reporter = ref default_alert_reporter
-let report_alert loc w = !alert_reporter loc w
+let alert_reporter = DLS.new_key (fun () -> default_alert_reporter)
+let report_alert loc w = (DLS.get alert_reporter) loc w
 
 let print_alert loc ppf w =
   match report_alert loc w with
   | None -> ()
   | Some report -> print_report ppf report
 
-let prerr_alert loc w = print_alert loc !formatter_for_warnings w
+let prerr_alert loc w = print_alert loc (DLS.get formatter_for_warnings) w
 
 let alert ?(def = none) ?(use = none) ~kind loc message =
   prerr_alert loc {Warnings.kind; message; def; use}
@@ -992,9 +994,10 @@ let deprecated_script_alert program =
 (******************************************************************************)
 (* Reporting errors on exceptions *)
 
-let error_of_exn : (exn -> error option) list ref = ref []
+let error_of_exn : (exn -> error option) list DLS.key = DLS.new_key (fun () -> [])
 
-let register_error_of_exn f = error_of_exn := f :: !error_of_exn
+let register_error_of_exn f =
+  DLS.set error_of_exn (f :: DLS.get error_of_exn)
 
 exception Already_displayed_error = Warnings.Errors
 
@@ -1009,13 +1012,13 @@ let error_of_exn exn =
           | Some error -> Some (`Ok error)
           | None -> loop rest
      in
-     loop !error_of_exn
+     loop (DLS.get error_of_exn)
 
 let () =
   register_error_of_exn
     (function
       | Sys_error msg ->
-          Some (errorf ~loc:(in_file !input_name) "I/O error: %s" msg)
+          Some (errorf ~loc:(in_file (DLS.get input_name)) "I/O error: %s" msg)
       | _ -> None
     )
 

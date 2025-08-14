@@ -16,6 +16,7 @@
 module Style = Misc.Style
 module Fmt = Format_doc
 module Printtyp = Printtyp.Doc
+module DLS = Domain.DLS
 
 module Context = struct
   type pos =
@@ -1002,7 +1003,7 @@ let err_msgs ppf (env, err) =
 
 let report_error_doc err =
   Location.errorf
-    ~loc:Location.(in_file !input_name)
+    ~loc:Location.(in_file (DLS.get input_name))
     ~footnote:Out_type.Ident_conflicts.err_msg
    "%a" err_msgs err
 

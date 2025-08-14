@@ -14,6 +14,8 @@
 (*                                                                        *)
 (**************************************************************************)
 
+module DLS = Domain.DLS
+
 [@@@ocaml.warning "+a-4-30-40-41-42-66"]
 open! Int_replace_polymorphic_compare
 
@@ -34,7 +36,7 @@ let _dump_function_sizes flam ~backend =
 let lambda_to_flambda ~ppf_dump ~prefixname ~backend ~size
       ~module_ident ~module_initializer =
   Profile.record_call "flambda" (fun () ->
-    let previous_warning_reporter = !Location.warning_reporter in
+    let previous_warning_reporter = DLS.get Location.warning_reporter in
     let module WarningSet =
       Set.Make (struct
         type t = Location.t * Warnings.t
@@ -50,7 +52,7 @@ let lambda_to_flambda ~ppf_dump ~prefixname ~backend ~size
       end else None
     in
     Misc.protect_refs
-      [Misc.R (Location.warning_reporter, flambda_warning_reporter)]
+      [Misc.R' (Location.warning_reporter, flambda_warning_reporter)]
       (fun () ->
          let pass_number = ref 0 in
          let round_number = ref 0 in

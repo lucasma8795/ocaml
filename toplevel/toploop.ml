@@ -17,6 +17,8 @@ open Format
 include Topcommon
 include Topeval
 
+module DLS = Domain.DLS
+
 type input =
   | Stdin
   | File of string
@@ -34,8 +36,8 @@ let use_lexbuf ppf ~wrap_in_module lb ~modpath ~filename =
   (* Skip initial #! line if any *)
   Lexer.skip_hash_bang lb;
   Misc.protect_refs
-    [ R (Location.input_name, filename);
-      R (Location.input_lexbuf, Some lb); ]
+    [ R' (Location.input_name, filename);
+      R' (Location.input_lexbuf, Some lb); ]
     (fun () ->
     try
       List.iter
@@ -294,7 +296,7 @@ let look_ahead ~print_warnings lb =
   in
   Misc.protect_refs [
       R' (Lexer.print_warnings, print_warnings);
-      Location.(R (report_printer, fun () -> batch_mode_printer));
+      Location.(R' (report_printer, fun () -> batch_mode_printer));
     ] (fun () -> Lexer.token shadow)
 ;;
 
@@ -375,14 +377,14 @@ let process_phrases ppf snap phrs =
     if rest <> [] then begin
       let process ph = Location.reset (); process_phrase ppf snap ph in
       Misc.protect_refs
-        Location.[R (report_printer, fun () -> batch_mode_printer)]
+        Location.[R' (report_printer, fun () -> batch_mode_printer)]
         (fun () -> List.iter process rest)
     end
 
 let loop ppf =
   Misc.Style.setup !Clflags.color;
   Clflags.debug := true;
-  Location.formatter_for_warnings := ppf;
+  DLS.set Location.formatter_for_warnings ppf;
   if not !Clflags.noversion then
     fprintf ppf "OCaml version %s%s%s@.Enter %a for help.@.@."
       Config.version
@@ -391,9 +393,9 @@ let loop ppf =
       (Format_doc.compat Misc.Style.inline_code) "#help;;";
   let lb = Lexing.from_function refill_lexbuf in
   Location.init lb "//toplevel//";
-  Location.input_name := "//toplevel//";
-  Location.input_lexbuf := Some lb;
-  Location.input_phrase_buffer := Some phrase_buffer;
+  DLS.set Location.input_name "//toplevel//";
+  DLS.set Location.input_lexbuf (Some lb);
+  DLS.set Location.input_phrase_buffer (Some phrase_buffer);
   Sys.catch_break true;
   run_hooks After_setup;
   load_ocamlinit ppf;

@@ -13,15 +13,17 @@
 (*                                                                        *)
 (**************************************************************************)
 
+module DLS = Domain.DLS
+
 (* Entry points in the parser *)
 
 (* Skip tokens to the end of the phrase *)
 
-let last_token = ref Parser.EOF
+let last_token = DLS.new_key (fun () -> Parser.EOF)
 
 let token lexbuf =
   let token = Lexer.token lexbuf in
-  last_token := token;
+  DLS.set last_token token;
   token
 
 let rec skip_phrase lexbuf =
@@ -36,39 +38,42 @@ let rec skip_phrase lexbuf =
       skip_phrase lexbuf
 
 let maybe_skip_phrase lexbuf =
-  match !last_token with
+  match DLS.get last_token with
   | Parser.SEMISEMI | Parser.EOF -> ()
   | _ -> skip_phrase lexbuf
 
 type 'a parser =
   (Lexing.lexbuf -> Parser.token) -> Lexing.lexbuf -> 'a
 
+let wrap = Mutex.create ()
+
 let wrap (parser : 'a parser) lexbuf : 'a =
-  try
-    Docstrings.init ();
-    let keyword_edition =
-      Clflags.(Option.map parse_keyword_edition !keyword_edition)
-    in
-    Lexer.init ?keyword_edition ();
-    let ast = parser token lexbuf in
-    Parsing.clear_parser();
-    Docstrings.warn_bad_docstrings ();
-    last_token := Parser.EOF;
-    ast
-  with
-  | Lexer.Error(Lexer.Illegal_character _, _) as err
-    when !Location.input_name = "//toplevel//"->
-      skip_phrase lexbuf;
-      raise err
-  | Syntaxerr.Error _ as err
-    when !Location.input_name = "//toplevel//" ->
-      maybe_skip_phrase lexbuf;
-      raise err
-  | Parsing.Parse_error | Syntaxerr.Escape_error ->
-      let loc = Location.curr lexbuf in
-      if !Location.input_name = "//toplevel//"
-      then maybe_skip_phrase lexbuf;
-      raise(Syntaxerr.Error(Syntaxerr.Other loc))
+  Mutex.protect wrap (fun () ->
+    try
+      Docstrings.init ();
+      let keyword_edition =
+        Clflags.(Option.map parse_keyword_edition !keyword_edition)
+      in
+      Lexer.init ?keyword_edition ();
+      let ast = parser token lexbuf in
+      Parsing.clear_parser ();
+      Docstrings.warn_bad_docstrings ();
+      DLS.set last_token Parser.EOF;
+      ast
+    with
+    | Lexer.Error(Lexer.Illegal_character _, _) as err
+      when DLS.get Location.input_name = "//toplevel//"->
+        skip_phrase lexbuf;
+        raise err
+    | Syntaxerr.Error _ as err
+      when DLS.get Location.input_name = "//toplevel//" ->
+        maybe_skip_phrase lexbuf;
+        raise err
+    | Parsing.Parse_error | Syntaxerr.Escape_error ->
+        let loc = Location.curr lexbuf in
+        if DLS.get Location.input_name = "//toplevel//"
+        then maybe_skip_phrase lexbuf;
+        raise(Syntaxerr.Error(Syntaxerr.Other loc)))
 
 (* We pass [--strategy simplified] to Menhir, which means that we wish to use
    its "simplified" strategy for handling errors. When a syntax error occurs,

@@ -28,6 +28,7 @@ open Ast_helper
 open Location
 
 module String = Misc.Stdlib.String
+module DLS = Domain.DLS
 
 type mapper = {
   attribute: mapper -> attribute -> attribute;
@@ -1127,13 +1128,13 @@ let apply_lazy ~source ~target mapper =
   in
 
   let rewrite transform =
-    Location.input_name := input_value ic;
+    DLS.set Location.input_name (input_value ic);
     let ast = input_value ic in
     close_in ic;
     let ast = transform ast in
     let oc = open_out_bin target in
     output_string oc magic;
-    output_value oc !Location.input_name;
+    output_value oc (DLS.get Location.input_name);
     output_value oc ast;
     close_out oc
   and fail () =
@@ -1201,5 +1202,5 @@ let run_main mapper =
     prerr_endline (Printexc.to_string exn);
     exit 2
 
-let register_function = ref (fun _name f -> run_main f)
-let register name f = !register_function name f
+let register_function = DLS.new_key (fun () _name f -> run_main f)
+let register name f = (DLS.get register_function) name f

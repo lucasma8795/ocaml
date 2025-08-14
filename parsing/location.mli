@@ -98,15 +98,15 @@ val mkloc : 'a -> t -> 'a loc
 
 (** {1 Input info} *)
 
-val input_name: string ref
-val input_lexbuf: Lexing.lexbuf option ref
+val input_name: string Domain.DLS.key
+val input_lexbuf: Lexing.lexbuf option Domain.DLS.key
 
 (* This is used for reporting errors coming from the toplevel.
 
    When running a toplevel session (i.e. when [!input_name] is "//toplevel//"),
    [!input_phrase_buffer] should be [Some buf] where [buf] contains the last
    toplevel phrase. *)
-val input_phrase_buffer: Buffer.t option ref
+val input_phrase_buffer: Buffer.t option Domain.DLS.key
 
 
 (** {1 Toplevel-specific functions} *)
@@ -272,7 +272,7 @@ val best_toplevel_printer: unit -> report_printer
 val print_report: formatter -> report -> unit
 (** Display an error or warning report. *)
 
-val report_printer: (unit -> report_printer) ref
+val report_printer: (unit -> report_printer) Domain.DLS.key
 (** Hook for redefining the printer of reports.
 
     The hook is a [unit -> report_printer] and not simply a [report_printer]:
@@ -291,7 +291,7 @@ val report_warning: t -> Warnings.t -> report option
 (** [report_warning loc w] produces a report for the given warning [w], or
    [None] if the warning is not to be printed. *)
 
-val warning_reporter: (t -> Warnings.t -> report option) ref
+val warning_reporter: (t -> Warnings.t -> report option) Domain.DLS.key
 (** Hook for intercepting warnings. *)
 
 val default_warning_reporter: t -> Warnings.t -> report option
@@ -299,7 +299,7 @@ val default_warning_reporter: t -> Warnings.t -> report option
 
 (** {2 Printing warnings} *)
 
-val formatter_for_warnings : formatter ref
+val formatter_for_warnings : formatter Domain.DLS.key
 
 val print_warning: t -> formatter -> Warnings.t -> unit
 (** Prints a warning. This is simply the composition of [report_warning] and
@@ -317,7 +317,7 @@ val report_alert: t -> Warnings.alert -> report option
 (** [report_alert loc w] produces a report for the given alert [w], or
    [None] if the alert is not to be printed. *)
 
-val alert_reporter: (t -> Warnings.alert -> report option) ref
+val alert_reporter: (t -> Warnings.alert -> report option) Domain.DLS.key
 (** Hook for intercepting alerts. *)
 
 val default_alert_reporter: t -> Warnings.alert -> report option

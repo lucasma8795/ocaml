@@ -34,6 +34,8 @@
 
 open StdLabels
 
+module DLS = Domain.DLS
+
 (* representation of: {tag|str|tag} *)
 type string_constant =
   { str : string
@@ -132,7 +134,7 @@ let split_chunks phrases =
 module Compiler_messages = struct
   let capture ppf ~f =
     Misc.protect_refs
-      [ R (Location.formatter_for_warnings, ppf) ]
+      [ R' (Location.formatter_for_warnings, ppf) ]
       f
 end
 
@@ -172,8 +174,8 @@ let exec_phrase ppf phrase =
 let parse_contents ~fname contents =
   let lexbuf = Lexing.from_string contents in
   Location.init lexbuf fname;
-  Location.input_name := fname;
-  Location.input_lexbuf := Some lexbuf;
+  DLS.set Location.input_name fname;
+  DLS.set Location.input_lexbuf (Some lexbuf);
   Parse.use_file lexbuf
 
 let eval_expectation expectation ~output =

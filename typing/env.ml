@@ -774,6 +774,7 @@ let components_of_module_maker' =
           components_maker ->
             (module_components_repr, module_components_failure) result)
 
+(* todo: make dls *)
 let components_of_functor_appl' =
   ref ((fun ~loc:_ ~f_path:_ ~f_comp:_ ~arg:_ _env -> assert false) :
           loc:Location.t -> f_path:Path.t -> f_comp:functor_components ->
@@ -953,6 +954,33 @@ let read_sign_of_cmi = sign_of_cmi ~freshen:true
 
 let save_sign_of_cmi = sign_of_cmi ~freshen:false
 
+(* module MRSW_lock : sig
+  type t
+
+end = struct
+  type t = {
+    counter_lock : Mutex.t;
+    write_lock : Mutex.t;
+    num_blocked_readers : int Atomic.t;
+  }
+
+  let create () =
+    {
+      read_lock = Mutex.create ();
+      global_lock = Mutex.create ();
+      num_blocked_readers = Atomic.make 0;
+    }
+
+  let protect_read mrsw f =
+    Mutex.protect mrsw.counter_lock (fun () ->
+      Atomic.incr mrsw.num_blocked_readers;
+      Mutex.lock mrsw.write_lock)
+      unfinished
+
+  let protect_write mrsw f =
+    Mutex.protect mrsw.write_lock f
+end *)
+
 let persistent_env : module_data Persistent_env.t DLS.key =
   s_table Persistent_env.empty ()
 
@@ -1064,7 +1092,7 @@ let rec find_module_components path env =
       (NameMap.find s sc.comp_modules).mda_components
   | Papply(f_path, arg) ->
       let f_comp = find_functor_components f_path env in
-      let loc = Location.(in_file !input_name) in
+      let loc = Location.(in_file (DLS.get input_name)) in
       !components_of_functor_appl' ~loc ~f_path ~f_comp ~arg env
   | Pextra_ty _ ->
     raise Not_found
@@ -3192,35 +3220,35 @@ let lookup_all_constructors_from_type ~use ~loc usage ty_path env =
    than report errors *)
 
 let find_module_by_name lid env =
-  let loc = Location.(in_file !input_name) in
+  let loc = Location.(in_file (DLS.get input_name)) in
   lookup_module ~errors:false ~use:false ~loc lid env
 
 let find_value_by_name lid env =
-  let loc = Location.(in_file !input_name) in
+  let loc = Location.(in_file (DLS.get input_name)) in
   lookup_value ~errors:false ~use:false ~loc lid env
 
 let find_type_by_name lid env =
-  let loc = Location.(in_file !input_name) in
+  let loc = Location.(in_file (DLS.get input_name)) in
   lookup_type ~errors:false ~use:false ~loc lid env
 
 let find_modtype_by_name lid env =
-  let loc = Location.(in_file !input_name) in
+  let loc = Location.(in_file (DLS.get input_name)) in
   lookup_modtype ~errors:false ~use:false ~loc lid env
 
 let find_class_by_name lid env =
-  let loc = Location.(in_file !input_name) in
+  let loc = Location.(in_file (DLS.get input_name)) in
   lookup_class ~errors:false ~use:false ~loc lid env
 
 let find_cltype_by_name lid env =
-  let loc = Location.(in_file !input_name) in
+  let loc = Location.(in_file (DLS.get input_name)) in
   lookup_cltype ~errors:false ~use:false ~loc lid env
 
 let find_constructor_by_name lid env =
-  let loc = Location.(in_file !input_name) in
+  let loc = Location.(in_file (DLS.get input_name)) in
   lookup_constructor ~errors:false ~use:false ~loc Positive lid env
 
 let find_label_by_name lid env =
-  let loc = Location.(in_file !input_name) in
+  let loc = Location.(in_file (DLS.get input_name)) in
   lookup_label ~errors:false ~use:false ~loc Projection lid env
 
 (* Stable name lookup for printing *)

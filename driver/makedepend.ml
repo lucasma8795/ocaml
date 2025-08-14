@@ -17,6 +17,7 @@
 
 open Parsetree
 module String = Misc.Stdlib.String
+module DLS = Domain.DLS
 
 let stderr = Format.err_formatter
 
@@ -256,8 +257,8 @@ let rec lexical_approximation lexbuf =
   let rec process ~after_lident lexbuf =
     match Lexer.token lexbuf with
     | Parser.UIDENT name ->
-        Depend.free_structure_names :=
-          String.Set.add name !Depend.free_structure_names;
+        Domain.DLS.set Depend.free_structure_names
+          (String.Set.add name (Domain.DLS.get Depend.free_structure_names));
         process ~after_lident:false lexbuf
     | Parser.LIDENT _ -> process ~after_lident:true lexbuf
     | Parser.DOT when after_lident -> process ~after_lident:false lexbuf
@@ -275,23 +276,23 @@ let rec lexical_approximation lexbuf =
   with Lexer.Error _ -> lexical_approximation lexbuf
 
 let read_and_approximate inputfile =
-  Depend.free_structure_names := String.Set.empty;
+  Domain.DLS.set Depend.free_structure_names String.Set.empty;
   begin try
     In_channel.with_open_bin inputfile @@ fun ic ->
     seek_in ic 0;
-    Location.input_name := inputfile;
+    DLS.set Location.input_name inputfile;
     let lexbuf = Lexing.from_channel ic in
     Location.init lexbuf inputfile;
     lexical_approximation lexbuf
   with exn ->
     report_err exn
   end;
-  !Depend.free_structure_names
+  Domain.DLS.get Depend.free_structure_names
 
 let read_parse_and_extract parse_function extract_function def ast_kind
     source_file =
-  Depend.pp_deps := [];
-  Depend.free_structure_names := String.Set.empty;
+  Domain.DLS.set Depend.pp_deps [];
+  Domain.DLS.set Depend.free_structure_names String.Set.empty;
   try
     let input_file = Pparse.preprocess source_file in
     Fun.protect ~finally:(fun () -> Pparse.remove_preprocessed input_file)
@@ -309,7 +310,7 @@ let read_parse_and_extract parse_function extract_function def ast_kind
           !module_map ((* PR#7248 *) List.rev !Clflags.open_modules)
       in
       let r = extract_function bound_vars ast in
-      (!Depend.free_structure_names, r)
+      (Domain.DLS.get Depend.free_structure_names, r)
   with x -> begin
     print_exception x;
     if not !allow_approximation then begin
@@ -379,14 +380,14 @@ let ml_file_dependencies source_file =
     read_parse_and_extract parse_use_file_as_impl Depend.add_implementation ()
                            Pparse.Structure source_file
   in
-  prepend_to_list files (source_file, ML, extracted_deps, !Depend.pp_deps)
+  prepend_to_list files (source_file, ML, extracted_deps, Domain.DLS.get Depend.pp_deps)
 
 let mli_file_dependencies source_file =
   let (extracted_deps, ()) =
     read_parse_and_extract Parse.interface Depend.add_signature ()
                            Pparse.Signature source_file
   in
-  prepend_to_list files (source_file, MLI, extracted_deps, !Depend.pp_deps)
+  prepend_to_list files (source_file, MLI, extracted_deps, Domain.DLS.get Depend.pp_deps)
 
 let process_file_as process_fun def source_file =
   Compenv.readenv stderr (Before_compile source_file);
@@ -399,7 +400,7 @@ let process_file_as process_fun def source_file =
        !Compenv.first_include_dirs @
        cwd
       ));
-  Location.input_name := source_file;
+  DLS.set Location.input_name source_file;
   try
     if Sys.file_exists source_file then process_fun source_file else def
   with x -> report_err x; def

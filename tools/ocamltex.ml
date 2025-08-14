@@ -19,6 +19,8 @@
 open StdLabels
 open Str
 
+module DLS = Domain.DLS
+
 let camlprefix = "caml"
 
 let latex_escape s = String.concat "" ["$"; s; "$"]
@@ -178,7 +180,7 @@ module Toplevel = struct
       self_error_fmt ("@[<hov 2>  Error " ^^ fmt)
 
   let init () =
-    Location.report_printer := (fun () -> report_printer);
+    DLS.set Location.report_printer (fun () -> report_printer);
     Clflags.color := Some Misc.Color.Never;
     Clflags.no_std_include := true;
     Compenv.last_include_dirs := [Filename.concat !repo_root "stdlib"];
@@ -204,8 +206,8 @@ module Toplevel = struct
   let parse fname mode s =
     let lex = Lexing.from_string s in
     Location.init lex fname;
-    Location.input_name := fname;
-    Location.input_lexbuf := Some lex;
+    DLS.set Location.input_name fname;
+    DLS.set Location.input_lexbuf (Some lex);
     try
       match mode with
       | Toplevel -> Parse.toplevel_phrase lex

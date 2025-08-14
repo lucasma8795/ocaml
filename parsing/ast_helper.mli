@@ -34,7 +34,7 @@ type attrs = attribute list
 
 (** {1 Default locations} *)
 
-val default_loc: loc ref
+val default_loc: loc Domain.DLS.key
     (** Default value for all optional location arguments. *)
 
 val with_default_loc: loc -> (unit -> 'a) -> 'a

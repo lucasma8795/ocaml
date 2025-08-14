@@ -353,15 +353,15 @@ let update_loc lexbuf file line absolute chars =
     pos_bol = pos.pos_cnum - chars;
   }
 
-let preprocessor = ref None
+let preprocessor = DLS.new_key (fun () -> None)
 
-let escaped_newlines = ref false
+let escaped_newlines = DLS.new_key (fun () -> false)
 
-let handle_docstrings = ref true
-let comment_list = ref []
+let handle_docstrings = DLS.new_key (fun () -> true)
+let comment_list = DLS.new_key (fun () -> [])
 
 let add_comment com =
-  comment_list := com :: !comment_list
+  DLS.set comment_list (com :: DLS.get comment_list)
 
 let add_docstring_comment ds =
   let com =
@@ -369,7 +369,7 @@ let add_docstring_comment ds =
   in
     add_comment com
 
-let comments () = List.rev !comment_list
+let comments () = List.rev (DLS.get comment_list)
 
 (* Error report *)
 
@@ -504,7 +504,7 @@ let raw_ident_escape = "\\#"
 
 rule token = parse
   | ('\\' as bs) newline {
-      if not !escaped_newlines then error lexbuf (Illegal_character bs);
+      if not (DLS.get escaped_newlines) then error lexbuf (Illegal_character bs);
       update_loc lexbuf None 1 false 0;
       token lexbuf }
   | newline
@@ -617,7 +617,7 @@ rule token = parse
         COMMENT (s, loc) }
   | "(**"
       { let s, loc = wrap_comment_lexer comment lexbuf in
-        if !handle_docstrings then
+        if DLS.get handle_docstrings then
           DOCSTRING (Docstrings.docstring s loc)
         else
           COMMENT ("*" ^ s, loc)
@@ -637,7 +637,7 @@ rule token = parse
         let s, loc = wrap_comment_lexer comment lexbuf in
         COMMENT (s, loc) }
   | "(*" (('*'*) as stars) "*)"
-      { if !handle_docstrings && stars="" then
+      { if DLS.get handle_docstrings && stars="" then
          (* (**) is an empty docstring *)
           DOCSTRING(Docstrings.docstring "" (Location.curr lexbuf))
         else
@@ -914,7 +914,7 @@ and skip_hash_bang = parse
 {
 
   let token_with_comments lexbuf =
-    match !preprocessor with
+    match DLS.get preprocessor with
     | None -> token lexbuf
     | Some (_init, preprocess) -> preprocess token lexbuf
 
@@ -1011,13 +1011,13 @@ and skip_hash_bang = parse
     populate_keywords keyword_edition;
     DLS.set is_in_string false;
     DLS.set comment_start_loc [];
-    comment_list := [];
-    match !preprocessor with
+    DLS.set comment_list [];
+    match DLS.get preprocessor with
     | None -> ()
     | Some (init, _preprocess) -> init ()
 
   let set_preprocessor init preprocess =
-    escaped_newlines := true;
-    preprocessor := Some (init, preprocess)
+    DLS.set escaped_newlines true;
+    DLS.set preprocessor (Some (init, preprocess))
 
 }

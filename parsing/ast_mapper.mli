@@ -145,7 +145,7 @@ val run_main: (string list -> mapper) -> unit
 
 (** {1 Registration API} *)
 
-val register_function: (string -> (string list -> mapper) -> unit) ref
+val register_function: (string -> (string list -> mapper) -> unit) Domain.DLS.key
 
 val register: string -> (string list -> mapper) -> unit
 (** Apply the [register_function].  The default behavior is to run the

@@ -15,6 +15,8 @@
 
 open Format_doc
 
+module DLS = Domain.DLS
+
 type error =
   | CannotRun of string
   | WrongMagic of string
@@ -61,7 +63,7 @@ let magic_of_kind : type a . a ast_kind -> string = function
 let write_ast (type a) (kind : a ast_kind) fn (ast : a) =
   let oc = open_out_bin fn in
   output_string oc (magic_of_kind kind);
-  output_value oc (!Location.input_name : string);
+  output_value oc (DLS.get Location.input_name : string);
   output_value oc (ast : a);
   close_out oc
 
@@ -98,7 +100,7 @@ let read_ast (type a) (kind : a ast_kind) fn : a =
        let magic = magic_of_kind kind in
        let buffer = really_input_string ic (String.length magic) in
        assert(buffer = magic); (* already checked by apply_rewriter *)
-       Location.input_name := (input_value ic : string);
+       DLS.set Location.input_name (input_value ic : string);
        (input_value ic : a)
     )
 
@@ -174,7 +176,7 @@ let set_input_lexbuf ic =
     In_channel.input_all ic
   in
   let lexbuf = Lexing.from_string source in
-  Location.input_lexbuf := Some lexbuf;
+  DLS.set Location.input_lexbuf (Some lexbuf);
   lexbuf
 
 let check_loc_ghost (type a) (kind : a ast_kind) (ast : a) ~inputfile =
@@ -198,15 +200,15 @@ let file_aux ~tool_name ~sourcefile inputfile (type a) parse_fun invariant_fun
     if is_ast_file then begin
       let ast =
         Fun.protect ~finally:close_ic @@ fun () ->
-        Location.input_name := (input_value ic : string);
+        DLS.set Location.input_name (input_value ic : string);
         begin match
-          In_channel.with_open_bin !Location.input_name set_input_lexbuf
+          In_channel.with_open_bin (DLS.get Location.input_name) set_input_lexbuf
         with
         | (_ : Lexing.lexbuf) -> ()
         | exception Sys_error _ -> ()
         end;
         if !Clflags.unsafe then
-          Location.prerr_warning (Location.in_file !Location.input_name)
+          Location.prerr_warning (Location.in_file (DLS.get Location.input_name))
             Warnings.Unsafe_array_syntax_without_parsing;
         (input_value ic : a)
       in
@@ -249,7 +251,7 @@ let () =
 let report_error = Format_doc.compat report_error_doc
 
 let parse_file ~tool_name invariant_fun parse kind sourcefile =
-  Location.input_name := sourcefile;
+  DLS.set Location.input_name sourcefile;
   let inputfile = preprocess sourcefile in
   Misc.try_finally
     (fun () ->

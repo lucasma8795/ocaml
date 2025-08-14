@@ -19,6 +19,8 @@ open Asttypes
 open Parsetree
 open Docstrings
 
+module DLS = Domain.DLS
+
 type 'a with_loc = 'a Location.loc
 type loc = Location.t
 
@@ -27,13 +29,13 @@ type str = string with_loc
 type str_opt = string option with_loc
 type attrs = attribute list
 
-let default_loc = ref Location.none
+let default_loc = DLS.new_key (fun () -> Location.none)
 
 let with_default_loc l f =
-  Misc.protect_refs [Misc.R (default_loc, l)] f
+  Misc.protect_refs [Misc.R' (default_loc, l)] f
 
 module Const = struct
-  let mk ?(loc = !default_loc) d =
+  let mk ?(loc = DLS.get default_loc) d =
     {pconst_desc = d;
      pconst_loc = loc}
 
@@ -45,19 +47,19 @@ module Const = struct
     integer ?loc ~suffix (Nativeint.to_string i)
   let float ?loc ?suffix f = mk ?loc (Pconst_float (f, suffix))
   let char ?loc c = mk ?loc (Pconst_char c)
-  let string ?quotation_delimiter ?(loc= !default_loc) s =
+  let string ?quotation_delimiter ?(loc= DLS.get default_loc) s =
     mk ~loc (Pconst_string (s, loc, quotation_delimiter))
 end
 
 module Attr = struct
-  let mk ?(loc= !default_loc) name payload =
+  let mk ?(loc= DLS.get default_loc) name payload =
     { attr_name = name;
       attr_payload = payload;
       attr_loc = loc }
 end
 
 module Typ = struct
-  let mk ?(loc = !default_loc) ?(attrs = []) d =
+  let mk ?(loc = DLS.get default_loc) ?(attrs = []) d =
     {ptyp_desc = d;
      ptyp_loc = loc;
      ptyp_loc_stack = [];
@@ -149,7 +151,7 @@ module Typ = struct
     in
     loop t
 
-  let package_type ?(loc = !default_loc) ?(attrs = []) p c =
+  let package_type ?(loc = DLS.get default_loc) ?(attrs = []) p c =
     {ppt_loc = loc;
      ppt_path = p;
      ppt_cstrs = c;
@@ -157,7 +159,7 @@ module Typ = struct
 end
 
 module Pat = struct
-  let mk ?(loc = !default_loc) ?(attrs = []) d =
+  let mk ?(loc = DLS.get default_loc) ?(attrs = []) d =
     {ppat_desc = d;
      ppat_loc = loc;
      ppat_loc_stack = [];
@@ -186,7 +188,7 @@ module Pat = struct
 end
 
 module Exp = struct
-  let mk ?(loc = !default_loc) ?(attrs = []) d =
+  let mk ?(loc = DLS.get default_loc) ?(attrs = []) d =
     {pexp_desc = d;
      pexp_loc = loc;
      pexp_loc_stack = [];
@@ -246,7 +248,7 @@ module Exp = struct
 end
 
 module Mty = struct
-  let mk ?(loc = !default_loc) ?(attrs = []) d =
+  let mk ?(loc = DLS.get default_loc) ?(attrs = []) d =
     {pmty_desc = d; pmty_loc = loc; pmty_attributes = attrs}
   let attr d a = {d with pmty_attributes = d.pmty_attributes @ [a]}
 
@@ -260,7 +262,7 @@ module Mty = struct
 end
 
 module Mod = struct
-  let mk ?(loc = !default_loc) ?(attrs = []) d =
+  let mk ?(loc = DLS.get default_loc) ?(attrs = []) d =
     {pmod_desc = d; pmod_loc = loc; pmod_attributes = attrs}
   let attr d a = {d with pmod_attributes = d.pmod_attributes @ [a]}
 
@@ -276,7 +278,7 @@ module Mod = struct
 end
 
 module Sig = struct
-  let mk ?(loc = !default_loc) d = {psig_desc = d; psig_loc = loc}
+  let mk ?(loc = DLS.get default_loc) d = {psig_desc = d; psig_loc = loc}
 
   let value ?loc a = mk ?loc (Psig_value a)
   let type_ ?loc rec_flag a = mk ?loc (Psig_type (rec_flag, a))
@@ -302,7 +304,7 @@ module Sig = struct
 end
 
 module Str = struct
-  let mk ?(loc = !default_loc) d = {pstr_desc = d; pstr_loc = loc}
+  let mk ?(loc = DLS.get default_loc) d = {pstr_desc = d; pstr_loc = loc}
 
   let eval ?loc ?(attrs = []) a = mk ?loc (Pstr_eval (a, attrs))
   let value ?loc a b = mk ?loc (Pstr_value (a, b))
@@ -327,7 +329,7 @@ module Str = struct
 end
 
 module Cl = struct
-  let mk ?(loc = !default_loc) ?(attrs = []) d =
+  let mk ?(loc = DLS.get default_loc) ?(attrs = []) d =
     {
      pcl_desc = d;
      pcl_loc = loc;
@@ -346,7 +348,7 @@ module Cl = struct
 end
 
 module Cty = struct
-  let mk ?(loc = !default_loc) ?(attrs = []) d =
+  let mk ?(loc = DLS.get default_loc) ?(attrs = []) d =
     {
      pcty_desc = d;
      pcty_loc = loc;
@@ -362,7 +364,7 @@ module Cty = struct
 end
 
 module Ctf = struct
-  let mk ?(loc = !default_loc) ?(attrs = [])
+  let mk ?(loc = DLS.get default_loc) ?(attrs = [])
            ?(docs = empty_docs) d =
     {
      pctf_desc = d;
@@ -387,7 +389,7 @@ module Ctf = struct
 end
 
 module Cf = struct
-  let mk ?(loc = !default_loc) ?(attrs = [])
+  let mk ?(loc = DLS.get default_loc) ?(attrs = [])
         ?(docs = empty_docs) d =
     {
      pcf_desc = d;
@@ -416,7 +418,7 @@ module Cf = struct
 end
 
 module Val = struct
-  let mk ?(loc = !default_loc) ?(attrs = []) ?(docs = empty_docs)
+  let mk ?(loc = DLS.get default_loc) ?(attrs = []) ?(docs = empty_docs)
         ?(prim = []) name typ =
     {
      pval_name = name;
@@ -428,7 +430,7 @@ module Val = struct
 end
 
 module Md = struct
-  let mk ?(loc = !default_loc) ?(attrs = [])
+  let mk ?(loc = DLS.get default_loc) ?(attrs = [])
         ?(docs = empty_docs) ?(text = []) name typ =
     {
      pmd_name = name;
@@ -440,7 +442,7 @@ module Md = struct
 end
 
 module Ms = struct
-  let mk ?(loc = !default_loc) ?(attrs = [])
+  let mk ?(loc = DLS.get default_loc) ?(attrs = [])
         ?(docs = empty_docs) ?(text = []) name syn =
     {
      pms_name = name;
@@ -452,7 +454,7 @@ module Ms = struct
 end
 
 module Mtd = struct
-  let mk ?(loc = !default_loc) ?(attrs = [])
+  let mk ?(loc = DLS.get default_loc) ?(attrs = [])
         ?(docs = empty_docs) ?(text = []) ?typ name =
     {
      pmtd_name = name;
@@ -464,7 +466,7 @@ module Mtd = struct
 end
 
 module Mb = struct
-  let mk ?(loc = !default_loc) ?(attrs = [])
+  let mk ?(loc = DLS.get default_loc) ?(attrs = [])
         ?(docs = empty_docs) ?(text = []) name expr =
     {
      pmb_name = name;
@@ -476,7 +478,7 @@ module Mb = struct
 end
 
 module Opn = struct
-  let mk ?(loc = !default_loc) ?(attrs = []) ?(docs = empty_docs)
+  let mk ?(loc = DLS.get default_loc) ?(attrs = []) ?(docs = empty_docs)
         ?(override = Fresh) expr =
     {
      popen_expr = expr;
@@ -487,7 +489,7 @@ module Opn = struct
 end
 
 module Incl = struct
-  let mk ?(loc = !default_loc) ?(attrs = []) ?(docs = empty_docs) mexpr =
+  let mk ?(loc = DLS.get default_loc) ?(attrs = []) ?(docs = empty_docs) mexpr =
     {
      pincl_mod = mexpr;
      pincl_loc = loc;
@@ -497,7 +499,7 @@ module Incl = struct
 end
 
 module Vb = struct
-  let mk ?(loc = !default_loc) ?(attrs = []) ?(docs = empty_docs)
+  let mk ?(loc = DLS.get default_loc) ?(attrs = []) ?(docs = empty_docs)
         ?(text = []) ?value_constraint pat expr =
     {
      pvb_pat = pat;
@@ -510,7 +512,7 @@ module Vb = struct
 end
 
 module Ci = struct
-  let mk ?(loc = !default_loc) ?(attrs = [])
+  let mk ?(loc = DLS.get default_loc) ?(attrs = [])
         ?(docs = empty_docs) ?(text = [])
         ?(virt = Concrete) ?(params = []) name expr =
     {
@@ -525,7 +527,7 @@ module Ci = struct
 end
 
 module Type = struct
-  let mk ?(loc = !default_loc) ?(attrs = [])
+  let mk ?(loc = DLS.get default_loc) ?(attrs = [])
         ?(docs = empty_docs) ?(text = [])
       ?(params = [])
       ?(cstrs = [])
@@ -545,7 +547,7 @@ module Type = struct
      ptype_loc = loc;
     }
 
-  let constructor ?(loc = !default_loc) ?(attrs = []) ?(info = empty_info)
+  let constructor ?(loc = DLS.get default_loc) ?(attrs = []) ?(info = empty_info)
         ?(vars = []) ?(args = Pcstr_tuple []) ?res name =
     {
      pcd_name = name;
@@ -556,7 +558,7 @@ module Type = struct
      pcd_attributes = add_info_attrs info attrs;
     }
 
-  let field ?(loc = !default_loc) ?(attrs = []) ?(info = empty_info)
+  let field ?(loc = DLS.get default_loc) ?(attrs = []) ?(info = empty_info)
         ?(mut = Immutable) name typ =
     {
      pld_name = name;
@@ -570,7 +572,7 @@ end
 
 (** Type extensions *)
 module Te = struct
-  let mk ?(loc = !default_loc) ?(attrs = []) ?(docs = empty_docs)
+  let mk ?(loc = DLS.get default_loc) ?(attrs = []) ?(docs = empty_docs)
         ?(params = []) ?(priv = Public) path constructors =
     {
      ptyext_path = path;
@@ -581,7 +583,7 @@ module Te = struct
      ptyext_attributes = add_docs_attrs docs attrs;
     }
 
-  let mk_exception ?(loc = !default_loc) ?(attrs = []) ?(docs = empty_docs)
+  let mk_exception ?(loc = DLS.get default_loc) ?(attrs = []) ?(docs = empty_docs)
       constructor =
     {
      ptyexn_constructor = constructor;
@@ -589,7 +591,7 @@ module Te = struct
      ptyexn_attributes = add_docs_attrs docs attrs;
     }
 
-  let constructor ?(loc = !default_loc) ?(attrs = [])
+  let constructor ?(loc = DLS.get default_loc) ?(attrs = [])
         ?(docs = empty_docs) ?(info = empty_info) name kind =
     {
      pext_name = name;
@@ -598,7 +600,7 @@ module Te = struct
      pext_attributes = add_docs_attrs docs (add_info_attrs info attrs);
     }
 
-  let decl ?(loc = !default_loc) ?(attrs = []) ?(docs = empty_docs)
+  let decl ?(loc = DLS.get default_loc) ?(attrs = []) ?(docs = empty_docs)
          ?(info = empty_info) ?(vars = []) ?(args = Pcstr_tuple []) ?res name =
     {
      pext_name = name;
@@ -607,7 +609,7 @@ module Te = struct
      pext_attributes = add_docs_attrs docs (add_info_attrs info attrs);
     }
 
-  let rebind ?(loc = !default_loc) ?(attrs = [])
+  let rebind ?(loc = DLS.get default_loc) ?(attrs = [])
         ?(docs = empty_docs) ?(info = empty_info) name lid =
     {
      pext_name = name;
@@ -635,7 +637,7 @@ end
 
 (** Row fields *)
 module Rf = struct
-  let mk ?(loc = !default_loc) ?(attrs = []) desc = {
+  let mk ?(loc = DLS.get default_loc) ?(attrs = []) desc = {
     prf_desc = desc;
     prf_loc = loc;
     prf_attributes = attrs;
@@ -648,7 +650,7 @@ end
 
 (** Object fields *)
 module Of = struct
-  let mk ?(loc = !default_loc) ?(attrs=[]) desc = {
+  let mk ?(loc = DLS.get default_loc) ?(attrs=[]) desc = {
     pof_desc = desc;
     pof_loc = loc;
     pof_attributes = attrs;

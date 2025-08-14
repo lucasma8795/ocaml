@@ -18,8 +18,9 @@ open Location
 open Longident
 open Parsetree
 module String = Misc.Stdlib.String
+module DLS = Domain.DLS
 
-let pp_deps = ref []
+let pp_deps = DLS.new_key (fun () -> [])
 
 (* Module resolution map *)
 (* Node (set of imports for this path, map for submodules) *)
@@ -52,10 +53,11 @@ let rec lookup_map lid m =
   | Ldot (l, s) -> String.Map.find s.txt (get_map (lookup_map l.txt m))
   | Lapply _    -> raise Not_found
 
-let free_structure_names = ref String.Set.empty
+let free_structure_names = DLS.new_key (fun () -> String.Set.empty)
 
 let add_names s =
-  free_structure_names := String.Set.union s !free_structure_names
+  DLS.set free_structure_names
+    (String.Set.union s (DLS.get free_structure_names))
 
 let rec add_path bv ?(p=[]) = function
   | Lident s ->
@@ -166,7 +168,7 @@ let add_type_extension bv te =
 let add_type_exception bv te =
   add_extension_constructor bv te.ptyexn_constructor
 
-let pattern_bv = ref String.Map.empty
+let pattern_bv = DLS.new_key (fun () -> String.Map.empty)
 
 let rec add_pattern bv pat =
   match pat.ppat_desc with
@@ -191,16 +193,17 @@ let rec add_pattern bv pat =
   | Ppat_lazy p -> add_pattern bv p
   | Ppat_unpack id ->
       Option.iter
-        (fun name -> pattern_bv := String.Map.add name bound !pattern_bv) id.txt
+        (fun name -> DLS.set pattern_bv
+          (String.Map.add name bound (DLS.get pattern_bv))) id.txt
   | Ppat_open ( m, p) -> let bv = open_module bv m.txt in add_pattern bv p
   | Ppat_effect(p1, p2) -> add_pattern bv p1; add_pattern bv p2
   | Ppat_exception p -> add_pattern bv p
   | Ppat_extension e -> handle_extension e
 
 let add_pattern bv pat =
-  pattern_bv := bv;
+  DLS.set pattern_bv bv;
   add_pattern bv pat;
-  !pattern_bv
+  DLS.get pattern_bv
 
 let rec add_expr bv exp =
   match exp.pexp_desc with

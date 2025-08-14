@@ -17,6 +17,7 @@ open Asttypes
 open Parsetree
 open Ast_helper
 
+module DLS = Domain.DLS
 
 module Attribute_table = Hashtbl.Make (struct
   type t = string with_loc
@@ -24,8 +25,8 @@ module Attribute_table = Hashtbl.Make (struct
   let hash : t -> int = Hashtbl.hash
   let equal : t -> t -> bool = (=)
 end)
-let unused_attrs = Attribute_table.create 128
-let mark_used t = Attribute_table.remove unused_attrs t
+let unused_attrs = DLS.new_key (fun () -> Attribute_table.create 128)
+let mark_used t = Attribute_table.remove (DLS.get unused_attrs) t
 
 (* [attr_order] is used to issue unused attribute warnings in the order the
    attributes occur in the file rather than the random order of the hash table
@@ -45,8 +46,8 @@ let compiler_stops_before_attributes_consumed () =
   stops_before_lambda || !Clflags.print_types
 
 let warn_unused () =
-  let keys = List.of_seq (Attribute_table.to_seq_keys unused_attrs) in
-  Attribute_table.clear unused_attrs;
+  let keys = List.of_seq (Attribute_table.to_seq_keys (DLS.get unused_attrs)) in
+  Attribute_table.clear (DLS.get unused_attrs);
   if not (compiler_stops_before_attributes_consumed ()) then
     let keys = List.sort attr_order keys in
     List.iter (fun sloc ->
@@ -83,8 +84,8 @@ let builtin_attrs =
   ]
 
 let builtin_attrs =
-  let tbl = Hashtbl.create 128 in
-  List.iter (fun attr -> Hashtbl.add tbl attr ()) builtin_attrs;
+  let tbl = DLS.new_key (fun () -> Hashtbl.create 128) in
+  List.iter (fun attr -> Hashtbl.add (DLS.get tbl) attr ()) builtin_attrs;
   tbl
 
 let drop_ocaml_attr_prefix s =
@@ -94,7 +95,7 @@ let drop_ocaml_attr_prefix s =
   else
     s
 
-let is_builtin_attr s = Hashtbl.mem builtin_attrs (drop_ocaml_attr_prefix s)
+let is_builtin_attr s = Hashtbl.mem (DLS.get builtin_attrs) (drop_ocaml_attr_prefix s)
 
 type current_phase = Parser | Invariant_check
 
@@ -103,7 +104,7 @@ let register_attr current_phase name =
   | Parser when !Clflags.all_ppx <> [] -> ()
   | Parser | Invariant_check ->
     if is_builtin_attr name.txt then
-      Attribute_table.replace unused_attrs name ()
+      Attribute_table.replace (DLS.get unused_attrs) name ()
 
 let string_of_cst const =
   match const.pconst_desc with

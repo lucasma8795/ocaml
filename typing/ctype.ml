@@ -120,7 +120,7 @@ let () =
           let inline_tag = Misc.Style.as_inline_code pp_tag in
           Some
             Location.
-              (errorf ~loc:(in_file !input_name)
+              (errorf ~loc:(in_file (DLS.get input_name))
                  "In this program,@ variant constructors@ %a and %a@ \
                   have the same hash value.@ Change one of them."
                  inline_tag l inline_tag l'

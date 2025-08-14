@@ -15,6 +15,8 @@
 
 open Location
 
+module DLS = Domain.DLS
+
 (* Docstrings *)
 
 (* A docstring is "attached" if it has been inserted in the AST. This
@@ -39,7 +41,7 @@ type docstring =
 
 (* List of docstrings *)
 
-let docstrings : docstring list ref = ref []
+let docstrings : docstring list DLS.key = DLS.new_key (fun () -> [])
 
 (* Warn for unused and ambiguous docstrings *)
 
@@ -56,7 +58,7 @@ let warn_bad_docstrings () =
              | Zero | One -> ()
              | Many ->
                prerr_warning ds.ds_loc (Warnings.Unexpected_docstring false))
-      (List.rev !docstrings)
+      (List.rev (DLS.get docstrings))
 end
 
 (* Docstring constructors and destructors *)
@@ -71,7 +73,7 @@ let docstring body loc =
   ds
 
 let register ds =
-  docstrings := ds :: !docstrings
+  DLS.set docstrings (ds :: DLS.get docstrings)
 
 let docstring_body ds = ds.ds_body
 
@@ -419,7 +421,7 @@ end
 (* (Re)Initialise all comment state *)
 
 let init () =
-  docstrings := [];
+  DLS.set docstrings [];
   Hashtbl.reset pre_table;
   Hashtbl.reset post_table;
   Hashtbl.reset floating_table;
