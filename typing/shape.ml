@@ -13,6 +13,8 @@
 (*                                                                        *)
 (**************************************************************************)
 
+module DLS = Domain.DLS
+
 module Uid = struct
   type t =
     | Compilation_unit of string
@@ -43,9 +45,9 @@ module Uid = struct
       print fmt t
   end)
 
-  let id = ref (-1)
+  let id = Local_store.s_ref (-1)
 
-  let reinit () = id := (-1)
+  let reinit () = DLS.set id (-1)
 
   let mk  ~current_unit =
       let comp_unit, from =
@@ -54,8 +56,8 @@ module Uid = struct
         | None -> "", Impl
         | Some ui -> modname ui, kind ui
       in
-      incr id;
-      Item { comp_unit; id = !id; from }
+      DLS.set id (DLS.get id + 1);
+      Item { comp_unit; id = DLS.get id; from }
 
   let of_compilation_unit_id id =
     if not (Ident.persistent id) then

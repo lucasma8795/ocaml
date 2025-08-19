@@ -605,14 +605,15 @@ type state =
   }
 
 let current =
-  DLS.new_key (fun () -> {
+  let split_from_parent x = x in
+  DLS.new_key ~split_from_parent (fun () -> {
     active = Array.make (last_warning_number + 1) true;
     error = Array.make (last_warning_number + 1) false;
     alerts = (Misc.Stdlib.String.Set.empty, false);
     alert_errors = (Misc.Stdlib.String.Set.empty, true); (* all soft *)
   })
 
-let disabled = DLS.new_key (fun () -> false)
+let disabled = Local_store.s_ref false
 
 let without_warnings f =
   Misc.protect_refs [Misc.R' (disabled, true)] f
@@ -1265,7 +1266,7 @@ let message = function
         Style.inline_code ".."
 ;;
 
-let nerrors = DLS.new_key (fun () -> 0)
+let nerrors = Local_store.s_ref 0
 
 type reporting_information =
   { id : string

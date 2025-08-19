@@ -20,7 +20,7 @@ open Parsetree
 module String = Misc.Stdlib.String
 module DLS = Domain.DLS
 
-let pp_deps = DLS.new_key (fun () -> [])
+let pp_deps = Local_store.s_ref []
 
 (* Module resolution map *)
 (* Node (set of imports for this path, map for submodules) *)
@@ -53,7 +53,7 @@ let rec lookup_map lid m =
   | Ldot (l, s) -> String.Map.find s.txt (get_map (lookup_map l.txt m))
   | Lapply _    -> raise Not_found
 
-let free_structure_names = DLS.new_key (fun () -> String.Set.empty)
+let free_structure_names = Local_store.s_ref String.Set.empty
 
 let add_names s =
   DLS.set free_structure_names
@@ -168,7 +168,7 @@ let add_type_extension bv te =
 let add_type_exception bv te =
   add_extension_constructor bv te.ptyexn_constructor
 
-let pattern_bv = DLS.new_key (fun () -> String.Map.empty)
+let pattern_bv = Local_store.s_ref String.Map.empty
 
 let rec add_pattern bv pat =
   match pat.ppat_desc with

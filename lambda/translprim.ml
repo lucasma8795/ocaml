@@ -23,6 +23,8 @@ open Typeopt
 open Lambda
 open Debuginfo.Scoped_location
 
+module DLS = Domain.DLS
+
 type error =
   | Unknown_builtin_primitive of string
   | Wrong_arity_builtin_primitive of string
@@ -105,19 +107,19 @@ type prim =
   | Revapply
   | Atomic of atomic_op * atomic_kind
 
-let used_primitives = Hashtbl.create 7
+let used_primitives = Local_store.s_table Hashtbl.create 7
 let add_used_primitive loc env path =
   match path with
     Some (Path.Pdot _ as path) ->
       let path = Env.normalize_value_path (Some loc) env path in
       let unit = Path.head path in
-      if Ident.global unit && not (Hashtbl.mem used_primitives path)
-      then Hashtbl.add used_primitives path loc
+      if Ident.global unit && not (Hashtbl.mem (DLS.get used_primitives) path)
+      then Hashtbl.add (DLS.get used_primitives) path loc
   | _ -> ()
 
-let clear_used_primitives () = Hashtbl.clear used_primitives
+let clear_used_primitives () = Hashtbl.clear (DLS.get used_primitives)
 let get_used_primitives () =
-  Hashtbl.fold (fun path _ acc -> path :: acc) used_primitives []
+  Hashtbl.fold (fun path _ acc -> path :: acc) (DLS.get used_primitives) []
 
 let gen_array_kind =
   if Config.flat_float_array then Pgenarray else Paddrarray

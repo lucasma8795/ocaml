@@ -13,6 +13,8 @@
 (*                                                                        *)
 (**************************************************************************)
 
+module DLS = Domain.DLS
+
 let mk_a f =
   "-a", Arg.Unit f, " Build a library"
 
@@ -1690,7 +1692,7 @@ module Default = struct
     let _error_style =
       Misc.set_or_ignore error_style_reader.parse error_style
     let _nopervasives = set nopervasives
-    let _ppx s = Compenv.first_ppx := (s :: (!Compenv.first_ppx))
+    let _ppx s = DLS.set Compenv.first_ppx (s :: (DLS.get Compenv.first_ppx))
     let _keywords s = Clflags.keyword_edition := (Some s)
     let _unsafe = set unsafe
     let _warn_error s =
@@ -1811,8 +1813,8 @@ module Default = struct
     let _c = set compile_only
     let _cc s = c_compiler := (Some s)
     let _cclib s = Compenv.defer (ProcessObjects (Misc.rev_split_words s))
-    let _ccopt s = Compenv.first_ccopts := (s :: (!Compenv.first_ccopts))
-    let _cmi_file s = cmi_file := (Some s)
+    let _ccopt s = DLS.set Compenv.first_ccopts (s :: DLS.get Compenv.first_ccopts)
+    let _cmi_file s = DLS.set cmi_file (Some s)
     let _config = Misc.show_config_and_exit
     let _config_var = Misc.show_config_variable_and_exit
     let _dprofile () = profile_columns := Profile.all_columns
@@ -1910,7 +1912,7 @@ module Default = struct
     let _afl_instrument = set afl_instrument
     let _function_sections () =
       assert Config.function_sections;
-      Compenv.first_ccopts := ("-ffunction-sections" ::(!Compenv.first_ccopts));
+      DLS.set Compenv.first_ccopts ("-ffunction-sections" :: DLS.get Compenv.first_ccopts);
       function_sections := true
     let _nodynlink = clear dlcode
     let _output_complete_obj () =

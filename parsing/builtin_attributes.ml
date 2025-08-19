@@ -25,7 +25,7 @@ module Attribute_table = Hashtbl.Make (struct
   let hash : t -> int = Hashtbl.hash
   let equal : t -> t -> bool = (=)
 end)
-let unused_attrs = DLS.new_key (fun () -> Attribute_table.create 128)
+let unused_attrs = Local_store.s_table Attribute_table.create 128
 let mark_used t = Attribute_table.remove (DLS.get unused_attrs) t
 
 (* [attr_order] is used to issue unused attribute warnings in the order the
@@ -84,7 +84,7 @@ let builtin_attrs =
   ]
 
 let builtin_attrs =
-  let tbl = DLS.new_key (fun () -> Hashtbl.create 128) in
+  let tbl = Local_store.s_table Hashtbl.create 128 in
   List.iter (fun attr -> Hashtbl.add (DLS.get tbl) attr ()) builtin_attrs;
   tbl
 

@@ -23,6 +23,7 @@ open Format
 open Parsetree
 open Outcometree
 open Ast_helper
+module DLS = Domain.DLS
 
 (* Hooks for parsing functions *)
 
@@ -276,9 +277,9 @@ let set_paths ?(auto_include=Compmisc.auto_include) ?(dir="") () =
   let Load_path.{ visible; hidden } = Load_path.get_paths () in
   let visible = List.concat [
       [ dir ];
-      List.map expand (List.rev !Compenv.first_include_dirs);
+      List.map expand (List.rev (DLS.get Compenv.first_include_dirs));
       List.map expand (List.rev !Clflags.include_dirs);
-      List.map expand (List.rev !Compenv.last_include_dirs);
+      List.map expand (List.rev (DLS.get Compenv.last_include_dirs));
       visible;
       [expand "+camlp4"];
     ]

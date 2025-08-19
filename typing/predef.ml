@@ -19,11 +19,13 @@ open Path
 open Types
 open Btype
 
-let builtin_idents = ref []
+module DLS = Domain.DLS
+
+let builtin_idents = Local_store.s_ref []
 
 let wrap create s =
   let id = create s in
-  builtin_idents := (s, id) :: !builtin_idents;
+  DLS.set builtin_idents ((s, id) :: DLS.get builtin_idents);
   id
 
 let ident_create = wrap Ident.create_predef
@@ -394,4 +396,4 @@ let build_initial_env add_type add_extension empty_env =
 let builtin_values =
   List.map (fun id -> (Ident.name id, id)) all_predef_exns
 
-let builtin_idents = List.rev !builtin_idents
+let builtin_idents = List.rev (DLS.get builtin_idents)

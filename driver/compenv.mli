@@ -24,15 +24,15 @@ val print_version_string : unit -> 'a
 val print_standard_library : unit -> 'a
 val fatal : string -> 'a
 
-val first_ccopts : string list ref
-val first_ppx : string list ref
-val first_include_dirs : string list ref
-val last_include_dirs : string list ref
+val first_ccopts : string list Domain.DLS.key
+val first_ppx : string list Domain.DLS.key
+val first_include_dirs : string list Domain.DLS.key
+val last_include_dirs : string list Domain.DLS.key
 
 (* return the list of objfiles, after OCAMLPARAM and List.rev *)
 val get_objfiles : with_ocamlparam:bool -> string list
-val last_objfiles : string list ref
-val first_objfiles : string list ref
+val last_objfiles : string list Domain.DLS.key
+val first_objfiles : string list Domain.DLS.key
 
 val stop_early : bool ref
 val has_linker_inputs : bool ref

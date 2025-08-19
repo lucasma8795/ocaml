@@ -16,39 +16,42 @@
 open Asttypes
 open Lambda
 
+module DLS = Domain.DLS
+
 (* Get oo primitives identifiers *)
 
 let oo_prim = Lambda.transl_prim "CamlinternalOO"
 
 (* Share blocks *)
 
-let consts : (structured_constant, Ident.t) Hashtbl.t = Hashtbl.create 17
+let consts : (structured_constant, Ident.t) Hashtbl.t DLS.key =
+  Local_store.s_table Hashtbl.create 17
 
 let share c =
   match c with
     Const_block (_n, l) when l <> [] ->
       begin try
-        Lvar (Hashtbl.find consts c)
+        Lvar (Hashtbl.find (DLS.get consts) c)
       with Not_found ->
         let id = Ident.create_local "shared" in
-        Hashtbl.add consts c id;
+        Hashtbl.add (DLS.get consts) c id;
         Lvar id
       end
   | _ -> Lconst c
 
 (* Collect labels *)
 
-let cache_required = ref false
-let method_cache = ref lambda_unit
-let method_count = ref 0
-let method_table = ref []
+let cache_required = Local_store.s_ref false
+let method_cache = Local_store.s_ref lambda_unit
+let method_count = Local_store.s_ref 0
+let method_table = Local_store.s_ref []
 
 let meth_tag s = Lconst(Const_base(Const_int(Btype.hash_variant s)))
 
 let next_cache tag =
-  let n = !method_count in
-  incr method_count;
-  (tag, [!method_cache; Lconst(Const_base(Const_int n))])
+  let n = DLS.get method_count in
+  DLS.set method_count (n + 1);
+  (tag, [DLS.get method_cache; Lconst(Const_base(Const_int n))])
 
 let rec is_path = function
     Lvar _ | Lprim (Pgetglobal _, [], _) | Lconst _ -> true
@@ -59,10 +62,10 @@ let rec is_path = function
 
 let meth obj lab =
   let tag = meth_tag lab in
-  if not (!cache_required && !Clflags.native_code) then (tag, []) else
+  if not (DLS.get cache_required && !Clflags.native_code) then (tag, []) else
   if not (is_path obj) then next_cache tag else
   try
-    let r = List.assoc obj !method_table in
+    let r = List.assoc obj (DLS.get method_table) in
     try
       (tag, List.assoc tag !r)
     with Not_found ->
@@ -71,13 +74,13 @@ let meth obj lab =
       p
   with Not_found ->
     let p = next_cache tag in
-    method_table := (obj, ref [p]) :: !method_table;
+    DLS.set method_table ((obj, ref [p]) :: (DLS.get method_table));
     p
 
 let reset_labels () =
-  Hashtbl.clear consts;
-  method_count := 0;
-  method_table := []
+  Hashtbl.clear (DLS.get consts);
+  DLS.set method_count 0;
+  DLS.set method_table []
 
 (* Insert labels *)
 
@@ -92,7 +95,7 @@ let transl_label_init_general f =
   let expr =
     Hashtbl.fold
       (fun c id expr -> Llet(Alias, Pgenval, id, Lconst c, expr))
-      consts expr
+      (DLS.get consts) expr
   in
   (*let expr =
     List.fold_right
@@ -106,17 +109,17 @@ let transl_label_init_general f =
 let transl_label_init_flambda f =
   assert(Config.flambda);
   let method_cache_id = Ident.create_local "method_cache" in
-  method_cache := Lvar method_cache_id;
+  DLS.set method_cache (Lvar method_cache_id);
   (* Calling f (usually Translmod.transl_struct) requires the
      method_cache variable to be initialised to be able to generate
      method accesses. *)
   let expr = f () in
   let expr =
-    if !method_count = 0 then expr
+    if DLS.get method_count = 0 then expr
     else
       Llet (Strict, Pgenval, method_cache_id,
         Lprim (Pccall prim_makearray,
-               [int !method_count; int 0],
+               [int (DLS.get method_count); int 0],
                Loc_unknown),
         expr)
   in
@@ -125,19 +128,19 @@ let transl_label_init_flambda f =
 let transl_store_label_init glob size f arg =
   assert(not Config.flambda);
   assert(!Clflags.native_code);
-  method_cache := Lprim(Pfield (size, Pointer, Mutable),
+  DLS.set method_cache (Lprim(Pfield (size, Pointer, Mutable),
                         (* XXX KC: conservative *)
                         [Lprim(Pgetglobal glob, [], Loc_unknown)],
-                        Loc_unknown);
+                        Loc_unknown));
   let expr = f arg in
   let (size, expr) =
-    if !method_count = 0 then (size, expr) else
+    if DLS.get method_count = 0 then (size, expr) else
     (size+1,
      Lsequence(
      Lprim(Psetfield(size, Pointer, Root_initialization),
            [Lprim(Pgetglobal glob, [], Loc_unknown);
             Lprim (Pccall prim_makearray,
-                   [int !method_count; int 0],
+                   [int (DLS.get method_count); int 0],
                    Loc_unknown)],
            Loc_unknown),
      expr))
@@ -152,27 +155,27 @@ let transl_label_init f =
 
 (* Share classes *)
 
-let wrapping = ref false
-let top_env = ref Env.empty
-let classes = ref []
-let method_ids = ref Ident.Set.empty
+let wrapping = Local_store.s_ref false
+let top_env = Local_store.s_ref Env.empty
+let classes = Local_store.s_ref []
+let method_ids = Local_store.s_ref Ident.Set.empty
 
 let oo_add_class id =
-  classes := id :: !classes;
-  (!top_env, !cache_required)
+  DLS.set classes (id :: DLS.get classes);
+  (DLS.get top_env, DLS.get cache_required)
 
 let oo_wrap_gen env req f x =
-  if !wrapping then
-    if !cache_required then f x else
-      Misc.protect_refs [Misc.R (cache_required, true)] (fun () ->
+  if DLS.get wrapping then
+    if DLS.get cache_required then f x else
+      Misc.protect_refs [Misc.R' (cache_required, true)] (fun () ->
           f x
         )
   else
-    Misc.protect_refs [Misc.R (wrapping, true); Misc.R (top_env, env)]
+    Misc.protect_refs [Misc.R' (wrapping, true); Misc.R' (top_env, env)]
       (fun () ->
-         cache_required := req;
-         classes := [];
-         method_ids := Ident.Set.empty;
+         DLS.set cache_required req;
+         DLS.set classes [];
+         DLS.set method_ids Ident.Set.empty;
          let lambda, other = f x in
          let lambda =
            List.fold_left
@@ -182,7 +185,7 @@ let oo_wrap_gen env req f x =
                            [lambda_unit; lambda_unit; lambda_unit],
                            Loc_unknown),
                      lambda))
-             lambda !classes
+             lambda (DLS.get classes)
          in
          lambda, other
       )
@@ -192,12 +195,12 @@ let oo_wrap env req f x =
   lam
 
 let reset () =
-  Hashtbl.clear consts;
-  cache_required := false;
-  method_cache := lambda_unit;
-  method_count := 0;
-  method_table := [];
-  wrapping := false;
-  top_env := Env.empty;
-  classes := [];
-  method_ids := Ident.Set.empty
+  Hashtbl.clear (DLS.get consts);
+  DLS.set cache_required false;
+  DLS.set method_cache lambda_unit;
+  DLS.set method_count 0;
+  DLS.set method_table [];
+  DLS.set wrapping false;
+  DLS.set top_env Env.empty;
+  DLS.set classes [];
+  DLS.set method_ids Ident.Set.empty

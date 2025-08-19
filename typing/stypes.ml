@@ -27,6 +27,8 @@ open Lexing
 open Location
 open Typedtree
 
+module DLS = Domain.DLS
+
 let output_int oc i = output_string oc (Int.to_string i)
 
 type annotation =
@@ -46,15 +48,15 @@ let get_location ti =
   | An_call (l, _k) -> l
   | An_ident (l, _s, _k) -> l
 
-let annotations = ref ([] : annotation list)
-let phrases = ref ([] : Location.t list)
+let annotations = Local_store.s_ref ([] : annotation list)
+let phrases = Local_store.s_ref ([] : Location.t list)
 
 let record ti =
   if !Clflags.annotations && not (get_location ti).Location.loc_ghost then
-    annotations := ti :: !annotations
+    DLS.set annotations (ti :: DLS.get annotations)
 
 let record_phrase loc =
-  if !Clflags.annotations then phrases := loc :: !phrases
+  if !Clflags.annotations then DLS.set phrases (loc :: DLS.get phrases)
 
 (* comparison order:
    the intervals are sorted by order of increasing upper bound
@@ -88,7 +90,7 @@ let print_location pp loc =
   print_position pp loc.loc_end
 
 let sort_filter_phrases () =
-  let ph = List.sort (fun x y -> cmp_loc_inner_first y x) !phrases in
+  let ph = List.sort (fun x y -> cmp_loc_inner_first y x) (DLS.get phrases) in
   let rec loop accu cur l =
     match l with
     | [] -> accu
@@ -98,13 +100,13 @@ let sort_filter_phrases () =
        then loop accu cur t
        else loop (loc :: accu) loc t
   in
-  phrases := loop [] Location.none ph
+  DLS.set phrases (loop [] Location.none ph)
 
 let rec printtyp_reset_maybe loc =
-  match !phrases with
+  match DLS.get phrases with
   | cur :: t when cur.loc_start.pos_cnum <= loc.loc_start.pos_cnum ->
      Out_type.reset ();
-     phrases := t;
+     DLS.set phrases t;
      printtyp_reset_maybe loc;
   | _ -> ()
 
@@ -176,8 +178,8 @@ let print_info pp prev_loc ti =
       loc
 
 let get_info () =
-  let info = List.fast_sort cmp_ti_inner_first !annotations in
-  annotations := [];
+  let info = List.fast_sort cmp_ti_inner_first (DLS.get annotations) in
+  DLS.set annotations [];
   info
 
 let dump filename =
@@ -191,7 +193,7 @@ let dump filename =
     | Some filename ->
         Misc.output_to_file_via_temporary ~mode:[Open_text] filename do_dump
     end;
-    phrases := [];
+    DLS.set phrases []
   end else begin
-    annotations := [];
+    DLS.set annotations []
   end

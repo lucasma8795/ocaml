@@ -40,7 +40,7 @@ val transl_package_flambda:
 val toplevel_name: Ident.t -> string
 val nat_toplevel_name: Ident.t -> Ident.t * int
 
-val primitive_declarations: Primitive.description list ref
+val primitive_declarations: Primitive.description list Domain.DLS.key
 
 type unsafe_component =
   | Unsafe_module_binding

@@ -78,14 +78,14 @@ let mknoloc txt = mkloc txt none
 (******************************************************************************)
 (* Input info *)
 
-let input_name = DLS.new_key (fun () -> "_none_")
-let input_lexbuf : lexbuf option DLS.key = DLS.new_key (fun () -> None)
-let input_phrase_buffer :  Buffer.t option DLS.key = DLS.new_key (fun () -> None)
+let input_name = Local_store.s_ref "_none_"
+let input_lexbuf = Local_store.s_ref (None : lexbuf option)
+let input_phrase_buffer = Local_store.s_ref (None : Buffer.t option)
 
 (******************************************************************************)
 (* Terminal info *)
 
-let status = DLS.new_key (fun () -> Terminfo.Uninitialised)
+let status = Local_store.s_ref Terminfo.Uninitialised
 
 let setup_terminal () =
   if DLS.get status = Terminfo.Uninitialised then
@@ -100,7 +100,7 @@ let setup_terminal () =
 
    We also use for {!is_first_report}, see below.
 *)
-let num_loc_lines = DLS.new_key (fun () -> 0)
+let num_loc_lines = Local_store.s_ref 0
 
 (* We use [num_loc_lines] to determine if the report about to be
    printed is the first or a follow-up report of the current
@@ -854,7 +854,7 @@ let default_report_printer () : report_printer =
   else
     batch_mode_printer
 
-let report_printer = DLS.new_key (fun () -> default_report_printer)
+let report_printer = Local_store.s_ref default_report_printer
 
 let print_report ppf report =
   let printer = (DLS.get report_printer) () in
@@ -918,10 +918,10 @@ let default_warning_reporter =
        else Report_warning id
     )
 
-let warning_reporter = DLS.new_key (fun () -> default_warning_reporter)
+let warning_reporter = Local_store.s_ref default_warning_reporter
 let report_warning loc w = (DLS.get warning_reporter) loc w
 
-let formatter_for_warnings = DLS.new_key (fun () -> Format.err_formatter)
+let formatter_for_warnings = Local_store.s_ref Format.err_formatter
 
 let print_warning loc ppf w =
   match report_warning loc w with
@@ -938,7 +938,7 @@ let default_alert_reporter =
        else Report_alert id
     )
 
-let alert_reporter = DLS.new_key (fun () -> default_alert_reporter)
+let alert_reporter = Local_store.s_ref default_alert_reporter
 let report_alert loc w = (DLS.get alert_reporter) loc w
 
 let print_alert loc ppf w =
@@ -994,7 +994,7 @@ let deprecated_script_alert program =
 (******************************************************************************)
 (* Reporting errors on exceptions *)
 
-let error_of_exn : (exn -> error option) list DLS.key = DLS.new_key (fun () -> [])
+let error_of_exn = Local_store.s_ref ([] : (exn -> error option) list)
 
 let register_error_of_exn f =
   DLS.set error_of_exn (f :: DLS.get error_of_exn)

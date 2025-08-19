@@ -516,12 +516,12 @@ let unify_pat_types loc env ty ty' =
 (* GADT unification inside solve_Ppat_construct and check_counter_example_pat *)
 (* We need to distinguish [pat] and [expected] if [refine = true] and
    [penv.in_counterexample = false] (see [unify_gadt] for details) *)
-let nothing_equated = TypePairs.create 0
+let nothing_equated = Local_store.s_table TypePairs.create 0
 let unify_pat_types_return_equated_pairs ~refine loc penv ~pat ~expected =
   try
     if refine || penv.Pattern_env.in_counterexample
     then unify_gadt penv ~pat ~expected
-    else (unify !!penv pat expected; nothing_equated)
+    else (unify !!penv pat expected; DLS.get nothing_equated)
   with
   | Unify err ->
       raise(Error(loc, !!penv, Pattern_type_clash(err, None)))
@@ -1253,9 +1253,35 @@ let compare_type_path env tpath1 tpath2 =
 exception Wrong_name_disambiguation of Env.t * wrong_name
 
 let get_constr_type_path ty =
+  let dbg s = Printf.eprintf "%d -> %s\n%!" (Domain.self () :> int) s in
+  let rec pp_path (p : Path.t) =
+    match p with
+    | Pident id -> Ident.to_string id
+    | Pdot(p, s) | Pextra_ty (p, Pcstr_ty s) ->
+        Printf.sprintf "%s.%s" (pp_path p) s
+    | Papply(p1, p2) -> Printf.sprintf "%s(%s)" (pp_path p1) (pp_path p2)
+    | Pextra_ty (p, Pext_ty) -> pp_path p
+  in
   match get_desc ty with
   | Tconstr(p, _, _) -> p
-  | _ -> assert false
+  | Tsubst (expr, None) -> begin
+      match expr.desc with
+      | Tconstr (path, _, _) -> dbg (Printf.sprintf "got Tsubst (Tconstr (%s, ?, ?), None)" (pp_path path)); assert false
+      | Tvar None -> dbg "got Tsubst (Tvar None, None)"; assert false
+      | Tvar (Some id) -> dbg (Printf.sprintf "got Tsubst (Tvar (%s), None)" id); assert false
+      | Ttuple _ -> dbg "got Tsubst (Ttuple _, None)"; assert false
+      | Tobject _ -> dbg "got Tsubst (Tobject _, None)"; assert false
+      | Tfield _ -> dbg "got Tsubst (Tfield _, None)"; assert false
+      | Tnil -> dbg "got Tsubst (Tnil, None)"; assert false
+      | Tlink _ -> dbg "got Tsubst (Tlink _, None)"; assert false
+      | Tsubst _ -> dbg "got Tsubst (Tsubst _, None)"; assert false
+      | Tvariant _ -> dbg "got Tsubst (Tvariant _, None)"; assert false
+      | Tunivar _ -> dbg "got Tsubst (Tunivar _, None)"; assert false
+      | Tpoly _ -> dbg "got Tsubst (Tpoly _, None)"; assert false
+      | Tpackage _ -> dbg "got Tsubst (Tpackage _, None)"; assert false
+      | _ -> dbg "got Tsubst (<something else>, None)"; assert false
+    end
+  | _ -> dbg "got something else"; assert false
 
 module NameChoice(Name : sig
   type t
@@ -3528,7 +3554,7 @@ let generalizable level ty =
   end
 
 (* Hack to allow coercion of self. Will clean-up later. *)
-let self_coercion = ref ([] : (Path.t * Location.t list ref) list)
+let self_coercion = Local_store.s_ref ([] : (Path.t * Location.t list ref) list)
 
 (* Helpers for type_cases *)
 
@@ -4931,7 +4957,7 @@ and type_coerce
         ~before_generalize:
          (fun (_, arg_type, _) -> enforce_current_level env arg_type)
     in
-    begin match !self_coercion, get_desc ty' with
+    begin match DLS.get self_coercion, get_desc ty' with
       | ((path, r) :: _, Tconstr (path', _, _))
         when is_self arg && Path.same path path' ->
           (* prerr_endline "self coercion"; *)
@@ -6779,7 +6805,7 @@ let type_let existential_ctx env rec_flag spat_sexp_list =
 let type_expression env sexp =
   let exp =
     with_local_level_generalize begin fun () ->
-      Typetexp.TyVarEnv.reset();
+      Typetexp.TyVarEnv.reset ();
       type_exp env sexp
     end
     ~before_generalize:(may_lower_contravariant env)

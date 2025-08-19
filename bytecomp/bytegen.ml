@@ -23,12 +23,16 @@ open Switch
 open Instruct
 open Debuginfo.Scoped_location
 
+module DLS = Domain.DLS
+
 (**** Label generation ****)
 
-let label_counter = ref 0
+let label_counter = Local_store.s_ref 0
 
 let new_label () =
-  incr label_counter; !label_counter
+  let ret = DLS.get label_counter + 1 in
+  DLS.set label_counter ret;
+  ret
 
 (**** Operations on compilation environments. ****)
 
@@ -336,11 +340,11 @@ type function_to_compile =
                                            and mutually recursive functions *)
     rec_pos: int }                      (* rank in recursive definition *)
 
-let functions_to_compile  = (Stack.create () : function_to_compile Stack.t)
+let functions_to_compile = Local_store.s_table Stack.create ()
 
 (* Name of current compilation unit (for debugging events) *)
 
-let compunit_name = ref ""
+let compunit_name = Local_store.s_ref ""
 
 let check_stack stack_info sz =
   let curr = stack_info.max_stack_used in
@@ -587,14 +591,14 @@ let rec comp_expr stack_info env exp sz cont =
             (getmethod :: Kapply nargs :: cont1)
         end
   | Lfunction{params; body; loc} -> (* assume kind = Curried *)
-      let cont = add_pseudo_event loc !compunit_name cont in
+      let cont = add_pseudo_event loc (DLS.get compunit_name) cont in
       let lbl = new_label() in
       let fv = Ident.Set.elements(free_variables exp) in
       let entries = closure_entries Single_non_recursive fv in
       let to_compile =
         { params = List.map fst params; body = body; label = lbl;
           entries = entries; rec_pos = 0 } in
-      Stack.push to_compile functions_to_compile;
+      Stack.push to_compile (DLS.get functions_to_compile);
       comp_args stack_info env (List.map (fun n -> Lvar n) fv) sz
         (Kclosure(lbl, List.length fv) :: cont)
   | Llet(_, _k, id, arg, body)
@@ -617,7 +621,7 @@ let rec comp_expr stack_info env exp sz cont =
             let to_compile =
               { params = List.map fst params; body = body; label = lbl;
                 entries = entries; rec_pos = pos} in
-            Stack.push to_compile functions_to_compile;
+            Stack.push to_compile (DLS.get functions_to_compile);
             lbl :: comp_fun (pos + 1) rem
       in
       let lbls = comp_fun 0 decl in
@@ -680,7 +684,7 @@ let rec comp_expr stack_info env exp sz cont =
          Kconst (Const_base (Const_int n))::
          Kaddint::cont)
   | Lprim(Pmakearray (kind, _), args, loc) ->
-      let cont = add_pseudo_event loc !compunit_name cont in
+      let cont = add_pseudo_event loc (DLS.get compunit_name) cont in
       begin match kind with
         Pintarray | Paddrarray ->
           comp_args stack_info env args sz
@@ -767,15 +771,15 @@ let rec comp_expr stack_info env exp sz cont =
       in
       comp_args stack_info env args sz cont
   | Lprim(Pmakeblock(tag, _mut, _), args, loc) ->
-      let cont = add_pseudo_event loc !compunit_name cont in
+      let cont = add_pseudo_event loc (DLS.get compunit_name) cont in
       comp_args stack_info env args sz
         (Kmakeblock(List.length args, tag) :: cont)
   | Lprim(Pmakelazyblock tag, [arg], loc) ->
-      let cont = add_pseudo_event loc !compunit_name cont in
+      let cont = add_pseudo_event loc (DLS.get compunit_name) cont in
       comp_args stack_info env [arg] sz
         (Kmakeblock(1, Lambda.tag_of_lazy_tag tag) :: cont)
   | Lprim(Pfloatfield n, args, loc) ->
-      let cont = add_pseudo_event loc !compunit_name cont in
+      let cont = add_pseudo_event loc (DLS.get compunit_name) cont in
       comp_args stack_info env args sz (Kgetfloatfield n :: cont)
   | Lprim(p, args, _) ->
       let nargs = List.length args - 1 in
@@ -925,7 +929,7 @@ let rec comp_expr stack_info env exp sz cont =
       let ev_defname = string_of_scoped_location lev.lev_loc in
       let event kind info =
         { ev_pos = 0;                   (* patched in emitcode *)
-          ev_module = !compunit_name;
+          ev_module = DLS.get compunit_name;
           ev_loc = to_location lev.lev_loc;
           ev_kind = kind;
           ev_defname;
@@ -1073,7 +1077,7 @@ let comp_remainder cont =
   let c = ref cont in
   begin try
     while true do
-      c := comp_function (Stack.pop functions_to_compile) !c
+      c := comp_function (Stack.pop (DLS.get functions_to_compile)) !c
     done
   with Stack.Empty ->
     ()
@@ -1083,19 +1087,19 @@ let comp_remainder cont =
 (**** Compilation of a lambda phrase ****)
 
 let reset () =
-  label_counter := 0;
-  compunit_name := "";
-  Stack.clear functions_to_compile
+  DLS.set label_counter 0;
+  DLS.set compunit_name "";
+  Stack.clear (DLS.get functions_to_compile)
 
 let compile_gen ?modulename ~init_stack expr =
   reset ();
   begin match modulename with
-  | Some name -> compunit_name := name
+  | Some name -> DLS.set compunit_name name
   | None -> ()
   end;
   Fun.protect ~finally:reset (fun () ->
   let init_code = comp_block empty_env expr init_stack [] in
-  if Stack.length functions_to_compile > 0 then begin
+  if Stack.length (DLS.get functions_to_compile) > 0 then begin
     let lbl_init = new_label() in
     (Kbranch lbl_init :: comp_remainder (Klabel lbl_init :: init_code)),
     false

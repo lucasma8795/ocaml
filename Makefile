@@ -61,6 +61,7 @@ expunge := expunge$(EXE)
 # Targets and dependencies for the compilerlibs/*.{cma,cmxa} archives
 
 utils_SOURCES = $(addprefix utils/, \
+  local_store.mli local_store.ml \
   config.mli config.ml \
   build_path_prefix_map.mli build_path_prefix_map.ml \
   format_doc.mli format_doc.ml \
@@ -68,7 +69,6 @@ utils_SOURCES = $(addprefix utils/, \
   identifiable.mli identifiable.ml \
   numbers.mli numbers.ml \
   arg_helper.mli arg_helper.ml \
-  local_store.mli local_store.ml \
   load_path.mli load_path.ml \
   clflags.mli clflags.ml \
   profile.mli profile.ml \
@@ -1668,18 +1668,21 @@ partialclean::
 
 ocamllex_LIBRARIES =
 
-ocamllex_SOURCES = $(addprefix lex/,\
-  cset.mli cset.ml \
-  syntax.mli syntax.ml \
-  parser.mly \
-  lexer.mli lexer.mll \
-  table.mli table.ml \
-  lexgen.mli lexgen.ml \
-  compact.mli compact.ml \
-  common.mli common.ml \
-  output.mli output.ml \
-  outputbis.mli outputbis.ml \
-  main.mli main.ml)
+ocamllex_SOURCES = \
+  utils/local_store.mli utils/local_store.ml \
+  $(addprefix lex/,\
+    cset.mli cset.ml \
+    syntax.mli syntax.ml \
+    parser.mly \
+    lexer.mli lexer.mll \
+    table.mli table.ml \
+    lexgen.mli lexgen.ml \
+    compact.mli compact.ml \
+    common.mli common.ml \
+    output.mli output.ml \
+    outputbis.mli outputbis.ml \
+    main.mli main.ml)
+# todo: check if we can remove utils/local_store
 
 .PHONY: lex-all
 lex-all: lex/ocamllex
@@ -2326,6 +2329,7 @@ tools/ocamldep$(EXE): OC_BYTECODE_LINKFLAGS += -compat-32
 
 ocamlprof_LIBRARIES =
 ocamlprof_SOURCES = \
+  local_store.mli local_store.ml \
   config.mli config.ml \
   build_path_prefix_map.mli build_path_prefix_map.ml \
   format_doc.mli format_doc.ml \
@@ -2333,7 +2337,6 @@ ocamlprof_SOURCES = \
   identifiable.mli identifiable.ml \
   numbers.mli numbers.ml \
   arg_helper.mli arg_helper.ml \
-  local_store.mli local_store.ml \
   load_path.mli load_path.ml \
   clflags.mli clflags.ml \
   terminfo.mli terminfo.ml \
@@ -2353,6 +2356,7 @@ ocamlprof_SOURCES = \
   ocamlprof.mli ocamlprof.ml
 
 ocamlcp_ocamloptp_SOURCES = \
+  local_store.mli local_store.ml \
   config.mli config.ml \
   build_path_prefix_map.mli build_path_prefix_map.ml \
   format_doc.mli format_doc.ml \
@@ -2362,7 +2366,6 @@ ocamlcp_ocamloptp_SOURCES = \
   identifiable.mli identifiable.ml \
   numbers.mli numbers.ml \
   arg_helper.mli arg_helper.ml \
-  local_store.mli local_store.ml \
   load_path.mli load_path.ml \
   clflags.mli clflags.ml \
   terminfo.mli terminfo.ml \
@@ -2381,6 +2384,7 @@ ocamloptp_SOURCES = $(ocamlcp_ocamloptp_SOURCES) ocamloptp.mli ocamloptp.ml
 # To help building mixed-mode libraries (OCaml + C)
 ocamlmklib_LIBRARIES =
 ocamlmklib_SOURCES = \
+  local_store.mli local_store.ml \
   config.ml \
   build_path_prefix_map.ml \
   format_doc.ml \
@@ -2391,6 +2395,7 @@ ocamlmklib_SOURCES = \
 
 ocamlmktop_LIBRARIES =
 ocamlmktop_SOURCES = \
+  local_store.mli local_store.ml \
   config.mli config.ml \
   build_path_prefix_map.mli build_path_prefix_map.ml \
   format_doc.mli format_doc.ml \
@@ -2398,7 +2403,6 @@ ocamlmktop_SOURCES = \
   identifiable.mli identifiable.ml \
   numbers.mli numbers.ml \
   arg_helper.mli arg_helper.ml \
-  local_store.mli local_store.ml \
   load_path.mli load_path.ml \
   clflags.mli clflags.ml \
   profile.mli profile.ml \

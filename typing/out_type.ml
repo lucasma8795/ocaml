@@ -24,6 +24,7 @@ open Types
 open Btype
 open Outcometree
 
+module DLS = Domain.DLS
 module String = Misc.Stdlib.String
 module Sig_component_kind = Shape.Sig_component_kind
 module Style = Misc.Style
@@ -44,12 +45,12 @@ end
 type bound_ident = { hide:bool; ident:Ident.t }
 
 (* printing environment for path shortening and naming *)
-let printing_env = ref Env.empty
+let printing_env = Local_store.s_ref Env.empty
 
 (* When printing, it is important to only observe the
    current printing environment, without reading any new
    cmi present on the file system *)
-let in_printing_env f = Env.without_cmis f !printing_env
+let in_printing_env f = Env.without_cmis f (DLS.get printing_env)
 
  type namespace = Sig_component_kind.t =
     | Value
@@ -127,7 +128,7 @@ module Ident_conflicts = struct
   module M = String.Map
   type explanation =
     { kind: namespace; name:string; root_name:string; location:Location.t}
-  let explanations = ref M.empty
+  let explanations = Local_store.s_ref M.empty
 
   let add namespace name id =
     match Namespace.location (Some namespace) id with
@@ -136,17 +137,17 @@ module Ident_conflicts = struct
         let explanation =
           { kind = namespace; location; name; root_name=Ident.name id}
         in
-        explanations := M.add name explanation !explanations
+        DLS.set explanations (M.add name explanation (DLS.get explanations))
 
   let collect_explanation namespace id ~name =
     let root_name = Ident.name id in
     (* if [name] is of the form "root_name/%d", we register both
       [id] and the identifier in scope for [root_name].
      *)
-    if root_name <> name && not (M.mem name !explanations) then
+    if root_name <> name && not (M.mem name (DLS.get explanations)) then
       begin
         add namespace name id;
-        if not (M.mem root_name !explanations) then
+        if not (M.mem root_name (DLS.get explanations)) then
           (* lookup the identifier in scope with name [root_name] and
              add it too
            *)
@@ -164,9 +165,9 @@ module Ident_conflicts = struct
     Fmt.fprintf ppf "@[<v>%a@]"
       (Fmt.pp_print_list pp_explanation) l
 
-  let reset () = explanations := M.empty
+  let reset () = DLS.set explanations M.empty
   let list_explanations () =
-    let c = !explanations in
+    let c = DLS.get explanations in
     reset ();
     c |> M.bindings |> List.map snd |> List.sort Stdlib.compare
 
@@ -222,7 +223,7 @@ module Ident_conflicts = struct
           )
   let err_print ppf = Option.iter Fmt.(fprintf ppf "@,%a" pp_doc) (err_msg ())
 
-  let exists () = M.cardinal !explanations >0
+  let exists () = M.cardinal (DLS.get explanations) > 0
 end
 
 module Ident_names = struct
@@ -230,8 +231,8 @@ module Ident_names = struct
 module M = String.Map
 module S = String.Set
 
-let enabled = ref true
-let enable b = enabled := b
+let enabled = Local_store.s_ref true
+let enable b = DLS.set enabled b
 
 (* Names bound in recursive definitions should be considered as bound
    in the environment when printing identifiers but not when trying
@@ -256,21 +257,21 @@ let enable b = enabled := b
   The [bound_in_recursion] bridges the gap between those two slightly different
   notions of printing environment.
 *)
-let bound_in_recursion = ref M.empty
+let bound_in_recursion = Local_store.s_ref M.empty
 
 (* When dealing with functor arguments, identity becomes fuzzy because the same
    syntactic argument may be represented by different identifiers during the
    error processing, we are thus disabling disambiguation on the argument name
 *)
-let fuzzy = ref S.empty
+let fuzzy = Local_store.s_ref S.empty
 let with_fuzzy id f =
-  protect_refs [ R(fuzzy, S.add (Ident.name id) !fuzzy) ] f
-let fuzzy_id namespace id = namespace = Module && S.mem (Ident.name id) !fuzzy
+  protect_refs [ R'(fuzzy, S.add (Ident.name id) (DLS.get fuzzy)) ] f
+let fuzzy_id namespace id = namespace = Module && S.mem (Ident.name id) (DLS.get fuzzy)
 
 let with_hidden ids f =
   let update m id = M.add (Ident.name id.ident) id.ident m in
-  let updated = List.fold_left update !bound_in_recursion ids in
-  protect_refs [ R(bound_in_recursion, updated )] f
+  let updated = List.fold_left update (DLS.get bound_in_recursion) ids in
+  protect_refs [ R'(bound_in_recursion, updated )] f
 
 let human_id id index =
   (* The identifier with index [k] is the (k+1)-th most recent identifier in
@@ -293,7 +294,7 @@ let indexed_name namespace id =
     | Value | Extension_constructor | Constructor | Label -> None
   in
   let index =
-    match M.find_opt (Ident.name id) !bound_in_recursion with
+    match M.find_opt (Ident.name id) (DLS.get bound_in_recursion) with
     | Some rec_bound_id ->
         (* the identifier name appears in the current group of recursive
            definition *)
@@ -320,7 +321,7 @@ let indexed_name namespace id =
   human_id id index
 
 let ident_name namespace id =
-  match namespace, !enabled with
+  match namespace, DLS.get enabled with
   | None, _ | _, false -> Out_name.create (Ident.name id)
   | Some namespace, true ->
       if fuzzy_id namespace id then Out_name.create (Ident.name id)
@@ -425,7 +426,7 @@ let rec tree_of_path ?(disambiguation=true) namespace p =
 
 let tree_of_path ?disambiguation namespace p =
   tree_of_path ?disambiguation namespace
-    (rewrite_double_underscore_paths !printing_env p)
+    (rewrite_double_underscore_paths (DLS.get printing_env) p)
 
 
 (* Print a recursive annotation *)
@@ -462,13 +463,13 @@ type best_path = Paths of Path.t list | Best of Path.t
 (** Short-paths cache: the five mutable variables below implement a one-slot
     cache for short-paths
  *)
-let printing_old = ref Env.empty
-let printing_pers = ref String.Set.empty
+let printing_old = Local_store.s_ref Env.empty
+let printing_pers = Local_store.s_ref String.Set.empty
 (** {!printing_old} and  {!printing_pers} are the keys of the one-slot cache *)
 
-let printing_depth = ref 0
-let printing_cont = ref ([] : Env.iter_cont list)
-let printing_map = ref Path.Map.empty
+let printing_depth = Local_store.s_ref 0
+let printing_cont = Local_store.s_ref ([] : Env.iter_cont list)
+let printing_map = Local_store.s_ref Path.Map.empty
 (**
    - {!printing_map} is the main value stored in the cache.
    Note that it is evaluated lazily and its value is updated during printing.
@@ -528,20 +529,20 @@ let rec path_size = function
 
 let same_printing_env env =
   let used_pers = Env.used_persistent () in
-  Env.same_types !printing_old env && String.Set.equal !printing_pers used_pers
+  Env.same_types (DLS.get printing_old) env && String.Set.equal (DLS.get printing_pers) used_pers
 
 let set_printing_env env =
-  printing_env := env;
+  DLS.set printing_env env;
   if !Clflags.real_paths ||
-     !printing_env == Env.empty ||
+     DLS.get printing_env == Env.empty ||
      same_printing_env env then
     ()
   else begin
     (* printf "Reset printing_map@."; *)
-    printing_old := env;
-    printing_pers := Env.used_persistent ();
-    printing_map := Path.Map.empty;
-    printing_depth := 0;
+    DLS.set printing_old env;
+    DLS.set printing_pers (Env.used_persistent ());
+    DLS.set printing_map Path.Map.empty;
+    DLS.set printing_depth 0;
     (* printf "Recompute printing_map.@."; *)
     let cont =
       Env.iter_types
@@ -550,14 +551,14 @@ let set_printing_env env =
           (* Format.eprintf "%a -> %a = %a@." path p path p' path p1 *)
           if s1 = Id then
           try
-            let r = Path.Map.find p1 !printing_map in
+            let r = Path.Map.find p1 (DLS.get printing_map) in
             match !r with
               Paths l -> r := Paths (p :: l)
             | Best p' -> r := Paths [p; p'] (* assert false *)
           with Not_found ->
-            printing_map := Path.Map.add p1 (ref (Paths [p])) !printing_map)
+            DLS.set printing_map (Path.Map.add p1 (ref (Paths [p])) (DLS.get printing_map)))
         env in
-    printing_cont := [cont];
+    DLS.set printing_cont [cont];
   end
 
 let wrap_printing_env env f =
@@ -604,24 +605,24 @@ let rec get_best_path r =
           (* Format.eprintf "evaluating %a@." path p; *)
           match !r with
             Best p' when path_size p >= path_size p' -> ()
-          | _ -> if is_unambiguous p !printing_env then r := Best p)
+          | _ -> if is_unambiguous p (DLS.get printing_env) then r := Best p)
               (* else Format.eprintf "%a ignored as ambiguous@." path p *)
         l;
       get_best_path r
 
 let best_type_path p =
-  if !printing_env == Env.empty
+  if DLS.get printing_env == Env.empty
   then (p, Id)
   else if !Clflags.real_paths
   then (p, Id)
   else
-    let (p', s) = normalize_type_path !printing_env p in
-    let get_path () = get_best_path (Path.Map.find  p' !printing_map) in
-    while !printing_cont <> [] &&
-      try fst (path_size (get_path ())) > !printing_depth with Not_found -> true
+    let (p', s) = normalize_type_path (DLS.get printing_env) p in
+    let get_path () = get_best_path (Path.Map.find  p' (DLS.get printing_map)) in
+    while DLS.get printing_cont <> [] &&
+      try fst (path_size (get_path ())) > DLS.get printing_depth with Not_found -> true
     do
-      printing_cont := List.map snd (Env.run_iter_cont !printing_cont);
-      incr printing_depth;
+      DLS.set printing_cont (List.map snd (Env.run_iter_cont (DLS.get printing_cont)));
+      DLS.set printing_depth (DLS.get printing_depth + 1);
     done;
     let p'' = try get_path () with Not_found -> p' in
     (* Format.eprintf "%a = %a -> %a@." path p path p' path p''; *)
@@ -704,17 +705,17 @@ module Internal_names : sig
 
 end = struct
 
-  let names = ref Ident.Set.empty
+  let names = Local_store.s_ref Ident.Set.empty
 
   let reset () =
-    names := Ident.Set.empty
+    DLS.set names Ident.Set.empty
 
   let add p =
     match p with
     | Pident id ->
         let name = Ident.name id in
         if String.length name > 0 && name.[0] = '$' then begin
-          names := Ident.Set.add id !names
+          DLS.set names (Ident.Set.add id (DLS.get names))
         end
     | Pdot _ | Papply _ | Pextra_ty _ -> ()
 
@@ -732,7 +733,7 @@ end = struct
                   let prev = Option.value ~default:[] prev in
                   String.Map.add constr (tree_of_path None p :: prev) acc
               | Definition | Rec_check_regularity -> acc)
-        !names String.Map.empty
+        (DLS.get names) String.Map.empty
     in
     String.Map.iter
       (fun constr out_idents ->
@@ -784,35 +785,35 @@ end = struct
      which maps from types to types.  The lookup process is
      "type -> apply substitution -> find name".  The substitution is presumed to
      be one-shot. *)
-  let names = ref ([] : (transient_expr * string) list)
-  let name_subst = ref ([] : (transient_expr * transient_expr) list)
-  let name_counter = ref 0
-  let named_vars = ref ([] : string list)
-  let visited_for_named_vars = ref ([] : transient_expr list)
+  let names = Local_store.s_ref ([] : (transient_expr * string) list)
+  let name_subst = Local_store.s_ref ([] : (transient_expr * transient_expr) list)
+  let name_counter = Local_store.s_ref 0
+  let named_vars = Local_store.s_ref ([] : string list)
+  let visited_for_named_vars = Local_store.s_ref ([] : transient_expr list)
 
-  let weak_counter = ref 1
-  let weak_var_map = ref TypeMap.empty
-  let named_weak_vars = ref String.Set.empty
+  let weak_counter = Local_store.s_ref 1
+  let weak_var_map = Local_store.s_ref TypeMap.empty
+  let named_weak_vars = Local_store.s_ref String.Set.empty
 
   let reset_names () =
-    names := [];
-    name_subst := [];
-    name_counter := 0;
-    named_vars := [];
-    visited_for_named_vars := []
+    DLS.set names [];
+    DLS.set name_subst [];
+    DLS.set name_counter 0;
+    DLS.set named_vars [];
+    DLS.set visited_for_named_vars []
 
   let add_named_var tty =
     match tty.desc with
       Tvar (Some name) | Tunivar (Some name) ->
-        if List.mem name !named_vars then () else
-        named_vars := name :: !named_vars
+        if List.mem name (DLS.get named_vars) then () else
+        DLS.set named_vars (name :: (DLS.get named_vars))
     | _ -> ()
 
   let rec add_named_vars ty =
     let tty = Transient_expr.repr ty in
     let px = proxy ty in
-    if not (List.memq px !visited_for_named_vars) then begin
-      visited_for_named_vars := px :: !visited_for_named_vars;
+    if not (List.memq px (DLS.get visited_for_named_vars)) then begin
+      DLS.set visited_for_named_vars (px :: (DLS.get visited_for_named_vars));
       match tty.desc with
       | Tvar _ | Tunivar _ ->
           add_named_var tty
@@ -821,33 +822,33 @@ end = struct
     end
 
   let substitute ty =
-    match List.assq ty !name_subst with
+    match List.assq ty (DLS.get name_subst) with
     | ty' -> ty'
     | exception Not_found -> ty
 
   let add_subst subst =
-    name_subst :=
-      List.map (fun (t1,t2) -> Transient_expr.repr t1, Transient_expr.repr t2)
-        subst
-      @ !name_subst
+    DLS.set name_subst
+      ((List.map (fun (t1,t2) -> Transient_expr.repr t1, Transient_expr.repr t2)
+        subst)
+      @ DLS.get name_subst)
 
   let name_is_already_used name =
-    List.mem name !named_vars
-    || List.exists (fun (_, name') -> name = name') !names
-    || String.Set.mem name !named_weak_vars
+    List.mem name (DLS.get named_vars)
+    || List.exists (fun (_, name') -> name = name') (DLS.get names)
+    || String.Set.mem name (DLS.get named_weak_vars)
 
   let rec new_name () =
-    let name = Misc.letter_of_int !name_counter in
-    incr name_counter;
+    let name = Misc.letter_of_int (DLS.get name_counter) in
+    DLS.set name_counter (DLS.get name_counter + 1);
     if name_is_already_used name then new_name () else name
 
   let rec new_weak_name ty () =
-    let name = "weak" ^ Int.to_string !weak_counter in
-    incr weak_counter;
+    let name = "weak" ^ Int.to_string (DLS.get weak_counter) in
+    DLS.set weak_counter (DLS.get weak_counter + 1);
     if name_is_already_used name then new_weak_name ty ()
     else begin
-        named_weak_vars := String.Set.add name !named_weak_vars;
-        weak_var_map := TypeMap.add ty name !weak_var_map;
+        DLS.set named_weak_vars (String.Set.add name (DLS.get named_weak_vars));
+        DLS.set weak_var_map (TypeMap.add ty name (DLS.get weak_var_map));
         name
       end
 
@@ -859,8 +860,8 @@ end = struct
     (* We've already been through repr at this stage, so t is our representative
        of the union-find class. *)
     let t = substitute t in
-    try List.assq t !names with Not_found ->
-      try TransientTypeMap.find t !weak_var_map with Not_found ->
+    try List.assq t (DLS.get names) with Not_found ->
+      try TransientTypeMap.find t (DLS.get weak_var_map) with Not_found ->
       let name =
         match t.desc with
           Tvar (Some name) | Tunivar (Some name) ->
@@ -870,7 +871,7 @@ end = struct
             let available name =
               List.for_all
                 (fun (_, name') -> name <> name')
-                !names
+                (DLS.get names)
             in
             if available name then name
             else
@@ -882,7 +883,7 @@ end = struct
             name_generator ()
       in
       (* Exception for type declarations *)
-      if name <> "_" then names := (t, name) :: !names;
+      if name <> "_" then DLS.set names ((t, name) :: (DLS.get names));
       name
 
   let check_name_of_type ~non_gen px =
@@ -891,17 +892,17 @@ end = struct
 
   let remove_names tyl =
     let tyl = List.map substitute tyl in
-    names := List.filter (fun (ty,_) -> not (List.memq ty tyl)) !names
+    DLS.set names (List.filter (fun (ty,_) -> not (List.memq ty tyl)) (DLS.get names))
 
   let with_local_names f =
-    let old_names = !names in
-    let old_subst = !name_subst in
-    names      := [];
-    name_subst := [];
+    let old_names = DLS.get names in
+    let old_subst = DLS.get name_subst in
+    DLS.set names [];
+    DLS.set name_subst [];
     try_finally
       ~always:(fun () ->
-        names      := old_names;
-        name_subst := old_subst)
+        DLS.set names old_names;
+        DLS.set name_subst old_subst)
       f
 
   let refresh_weak () =
@@ -913,9 +914,9 @@ end = struct
         end
       else m, s in
     let m, s =
-      TypeMap.fold refresh !weak_var_map (TypeMap.empty ,String.Set.empty) in
-    named_weak_vars := s;
-    weak_var_map := m
+      TypeMap.fold refresh (DLS.get weak_var_map) (TypeMap.empty ,String.Set.empty) in
+    DLS.set named_weak_vars s;
+    DLS.set weak_var_map m
 
   let reserve ty =
     normalize_type ty;
@@ -923,36 +924,36 @@ end = struct
 end
 
 module Aliases = struct
-  let visited_objects = ref ([] : transient_expr list)
-  let aliased = ref ([] : transient_expr list)
-  let delayed = ref ([] : transient_expr list)
-  let printed_aliases = ref ([] : transient_expr list)
+  let visited_objects = Local_store.s_ref ([] : transient_expr list)
+  let aliased = Local_store.s_ref ([] : transient_expr list)
+  let delayed = Local_store.s_ref ([] : transient_expr list)
+  let printed_aliases = Local_store.s_ref ([] : transient_expr list)
 
 (* [printed_aliases] is a subset of [aliased] that records only those aliased
    types that have actually been printed; this allows us to avoid naming loops
    that the user will never see. *)
 
-  let is_delayed t = List.memq t !delayed
+  let is_delayed t = List.memq t (DLS.get delayed)
 
   let remove_delay t =
     if is_delayed t then
-      delayed := List.filter ((!=) t) !delayed
+      DLS.set delayed (List.filter ((!=) t) (DLS.get delayed))
 
   let add_delayed t =
-    if not (is_delayed t) then delayed := t :: !delayed
+    if not (is_delayed t) then DLS.set delayed (t :: (DLS.get delayed))
 
-  let is_aliased_proxy px = List.memq px !aliased
-  let is_printed_proxy px = List.memq px !printed_aliases
+  let is_aliased_proxy px = List.memq px (DLS.get aliased)
+  let is_printed_proxy px = List.memq px (DLS.get printed_aliases)
 
   let add_proxy px =
     if not (is_aliased_proxy px) then
-      aliased := px :: !aliased
+      DLS.set aliased (px :: (DLS.get aliased))
 
   let add ty = add_proxy (proxy ty)
 
   let add_printed_proxy ~non_gen px =
     Variable_names.check_name_of_type ~non_gen px;
-    printed_aliases := px :: !printed_aliases
+    DLS.set printed_aliases (px :: (DLS.get printed_aliases))
 
   let mark_as_printed px =
      if is_aliased_proxy px then (add_printed_proxy ~non_gen:false) px
@@ -979,9 +980,9 @@ module Aliases = struct
       let visited = px :: visited in
       match tty.desc with
       | Tvariant _ | Tobject _ ->
-          if List.memq px !visited_objects then add_proxy px else begin
+          if List.memq px (DLS.get visited_objects) then add_proxy px else begin
             if should_visit_object ty then
-              visited_objects := px :: !visited_objects;
+              DLS.set visited_objects (px :: (DLS.get visited_objects));
             printer_iter_type_expr (mark_loops_rec visited) ty
           end
       | Tpoly(ty, tyl) ->
@@ -994,7 +995,10 @@ module Aliases = struct
     mark_loops_rec [] ty
 
   let reset () =
-    visited_objects := []; aliased := []; delayed := []; printed_aliases := []
+    DLS.set visited_objects [];
+    DLS.set aliased [];
+    DLS.set delayed [];
+    DLS.set printed_aliases []
 
 end
 
@@ -1017,8 +1021,8 @@ let prepare_for_printing tyl =
 let add_type_to_preparation = prepare_type
 
 (* Disabled in classic mode when printing an unification error *)
-let print_labels = ref true
-let with_labels b f = Misc.protect_refs [R (print_labels,b)] f
+let print_labels = Local_store.s_ref true
+let with_labels b f = Misc.protect_refs [R' (print_labels, b)] f
 
 let alias_nongen_row mode px ty =
     match get_desc ty with
@@ -1043,7 +1047,7 @@ let rec tree_of_typexp mode ty =
         Otyp_var (non_gen, Variable_names.name_of_type name_gen tty)
     | Tarrow(l, ty1, ty2, _) ->
         let lab =
-          if !print_labels || is_optional l then l else Nolabel
+          if DLS.get print_labels || is_optional l then l else Nolabel
         in
         let t1 =
           if is_optional l then
@@ -1116,7 +1120,7 @@ let rec tree_of_typexp mode ty =
           prerr_string "; " in *)
         if tyl = [] then tree_of_typexp mode ty else begin
           let tyl = List.map Transient_expr.repr tyl in
-          let old_delayed = !Aliases.delayed in
+          let old_delayed = DLS.get Aliases.delayed in
           (* Make the names delayed, so that the real type is
              printed once when used as proxy *)
           List.iter Aliases.add_delayed tyl;
@@ -1124,7 +1128,7 @@ let rec tree_of_typexp mode ty =
           let tr = Otyp_poly (tl, tree_of_typexp mode ty) in
           (* Forget names when we leave scope *)
           Variable_names.remove_names tyl;
-          Aliases.delayed := old_delayed; tr
+          DLS.set Aliases.delayed old_delayed; tr
         end
     | Tunivar _ ->
         Otyp_var (false, Variable_names.(name_of_type new_name) tty)
@@ -1586,7 +1590,7 @@ let tree_of_method mode (lab, priv, virt, ty) =
 let rec prepare_class_type params = function
   | Cty_constr (_p, tyl, cty) ->
       let row = Btype.self_type_row cty in
-      if List.memq (proxy row) !Aliases.visited_objects
+      if List.memq (proxy row) (DLS.get Aliases.visited_objects)
       || not (List.for_all is_Tvar params)
       || deep_occur_list row tyl
       then prepare_class_type params cty
@@ -1594,8 +1598,8 @@ let rec prepare_class_type params = function
   | Cty_signature sign ->
       (* Self may have a name *)
       let px = proxy sign.csig_self_row in
-      if List.memq px !Aliases.visited_objects then Aliases.add_proxy px
-      else Aliases.(visited_objects := px :: !visited_objects);
+      if List.memq px (DLS.get Aliases.visited_objects) then Aliases.add_proxy px
+      else Aliases.(DLS.set visited_objects (px :: (DLS.get visited_objects)));
       Vars.iter (fun _ (_, _, ty) -> prepare_type ty) sign.csig_vars;
       Meths.iter prepare_method sign.csig_meths
   | Cty_arrow (_, ty, cty) ->
@@ -1606,7 +1610,7 @@ let rec tree_of_class_type mode params =
   function
   | Cty_constr (p', tyl, cty) ->
       let row = Btype.self_type_row cty in
-      if List.memq (proxy row) !Aliases.visited_objects
+      if List.memq (proxy row) (DLS.get Aliases.visited_objects)
       || not (List.for_all is_Tvar params)
       then
         tree_of_class_type mode params cty
@@ -1653,7 +1657,7 @@ let rec tree_of_class_type mode params =
       Octy_signature (self_ty, List.rev csil)
   | Cty_arrow (l, ty, cty) ->
       let lab =
-        if !print_labels || is_optional l then l else Nolabel
+        if DLS.get print_labels || is_optional l then l else Nolabel
       in
       let tr =
        if is_optional l then
@@ -1735,12 +1739,12 @@ let tree_of_cltype_declaration id cl rs =
 let wrap_env fenv ftree arg =
   (* We save the current value of the short-path cache *)
   (* From keys *)
-  let env = !printing_env in
-  let old_pers = !printing_pers in
+  let env = DLS.get printing_env in
+  let old_pers = DLS.get printing_pers in
   (* to data *)
-  let old_map = !printing_map in
-  let old_depth = !printing_depth in
-  let old_cont = !printing_cont in
+  let old_map = DLS.get printing_map in
+  let old_depth = DLS.get printing_depth in
+  let old_cont = DLS.get printing_cont in
   set_printing_env (fenv env);
   let tree = ftree arg in
   if !Clflags.real_paths
@@ -1749,11 +1753,11 @@ let wrap_env fenv ftree arg =
       progress made on the computation of the [printing_map] *)
   else begin
     (* we restore the snapshotted cache before calling set_printing_env *)
-    printing_old := env;
-    printing_pers := old_pers;
-    printing_depth := old_depth;
-    printing_cont := old_cont;
-    printing_map := old_map
+    DLS.set printing_old env;
+    DLS.set printing_pers old_pers;
+    DLS.set printing_depth old_depth;
+    DLS.set printing_cont old_cont;
+    DLS.set printing_map old_map
   end;
   set_printing_env env;
   tree
@@ -1841,14 +1845,14 @@ and tree_of_functor_parameter = function
 
 and tree_of_signature sg =
   wrap_env (fun env -> env)(fun sg ->
-      let tree_groups = tree_of_signature_rec !printing_env sg in
+      let tree_groups = tree_of_signature_rec (DLS.get printing_env) sg in
       List.concat_map (fun (_env,l) -> List.map snd l) tree_groups
     ) sg
 
 and tree_of_signature_rec env' sg =
   let structured = List.of_seq (Signature_group.seq sg) in
   let collect_trees_of_rec_group group =
-    let env = !printing_env in
+    let env = DLS.get printing_env in
     let env', group_trees =
        trees_of_recursive_sigitem_group env group
     in

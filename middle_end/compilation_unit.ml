@@ -17,6 +17,8 @@
 [@@@ocaml.warning "+a-4-9-30-40-41-42-66"]
 open! Int_replace_polymorphic_compare
 
+module DLS = Domain.DLS
+
 type t = {
   id : Ident.t;
   linkage_name : Linkage_name.t;
@@ -64,15 +66,15 @@ let create (id : Ident.t) linkage_name =
 let get_persistent_ident cu = cu.id
 let get_linkage_name cu = cu.linkage_name
 
-let current = ref None
+let current = Local_store.s_ref None
 let is_current arg =
-  match !current with
+  match DLS.get current with
   | None -> Misc.fatal_error "Current compilation unit is not set!"
   | Some cur -> equal cur arg
-let set_current t = current := Some t
-let get_current () = !current
+let set_current t = DLS.set current (Some t)
+let get_current () = DLS.get current
 let get_current_exn () =
-  match !current with
+  match DLS.get current with
   | Some current -> current
   | None -> Misc.fatal_error "Compilation_unit.get_current_exn"
 let get_current_id_exn () = get_persistent_ident (get_current_exn ())

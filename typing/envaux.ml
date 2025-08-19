@@ -16,21 +16,23 @@
 
 open Env
 
+module DLS = Domain.DLS
+
 type error =
     Module_not_found of Path.t
 
 exception Error of error
 
-let env_cache =
-  (Hashtbl.create 59 : ((Env.summary * Subst.t), Env.t) Hashtbl.t)
+let env_cache : ((Env.summary * Subst.t), Env.t) Hashtbl.t DLS.key =
+  Local_store.s_table Hashtbl.create 59
 
 let reset_cache () =
-  Hashtbl.clear env_cache;
-  Env.reset_cache()
+  Hashtbl.clear (DLS.get env_cache);
+  Env.reset_cache ()
 
 let rec env_from_summary sum subst =
   try
-    Hashtbl.find env_cache (sum, subst)
+    Hashtbl.find (DLS.get env_cache) (sum, subst)
   with Not_found ->
     let env =
       match sum with
@@ -93,7 +95,7 @@ let rec env_from_summary sum subst =
           let env = env_from_summary s subst in
           Env.enter_unbound_module str reason env
     in
-      Hashtbl.add env_cache (sum, subst) env;
+      Hashtbl.add (DLS.get env_cache) (sum, subst) env;
       env
 
 let env_of_only_summary env =

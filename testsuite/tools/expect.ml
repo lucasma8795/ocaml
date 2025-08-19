@@ -346,7 +346,7 @@ let main fname =
            [Compenv.last_include_dirs] to make sure that the stdlib
            directory is the last one. *)
         Clflags.no_std_include := true;
-        Compenv.last_include_dirs := [Filename.concat dir "stdlib"]
+        DLS.set Compenv.last_include_dirs [Filename.concat dir "stdlib"]
   end;
   Compmisc.init_path ~auto_include:Load_path.no_auto_include ();
   Toploop.initialize_toplevel_env ();

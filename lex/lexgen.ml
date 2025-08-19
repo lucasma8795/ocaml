@@ -19,6 +19,8 @@
 open Syntax
 (*open Printf*)
 
+module DLS = Domain.DLS
+
 exception Memory_overflow
 
 (* Deep abstract syntax for regular expressions *)
@@ -264,21 +266,21 @@ let find_chars e =
 (* From shallow to deep syntax *)
 (*******************************)
 
-let chars = ref ([] : Cset.t list)
-let chars_count = ref 0
+let chars = Local_store.s_ref ([] : Cset.t list)
+let chars_count = Local_store.s_ref 0
 
 
 let rec encode_regexp char_vars act = function
     Epsilon -> Empty
   | Characters cl ->
-      let n = !chars_count in
-      chars := cl :: !chars;
-      incr chars_count;
+      let n = DLS.get chars_count in
+      DLS.set chars (cl :: DLS.get chars);
+      DLS.set chars_count (n + 1);
       Chars(n,false)
   | Eof ->
-      let n = !chars_count in
-      chars := Cset.eof :: !chars;
-      incr chars_count;
+      let n = DLS.get chars_count in
+      DLS.set chars (Cset.eof :: DLS.get chars);
+      DLS.set chars_count (n + 1);
       Chars(n,true)
   | Sequence(r1,r2) ->
       let r1 = encode_regexp char_vars act r1 in
@@ -500,8 +502,8 @@ let encode_casedef casedef =
   r
 
 let encode_lexdef def =
-  chars := [];
-  chars_count := 0;
+  DLS.set chars [];
+  DLS.set chars_count 0;
   let entry_list =
     List.map
       (fun {name=entry_name; args=args; shortest=shortest; clauses=casedef} ->
@@ -511,8 +513,8 @@ let encode_lexdef def =
           lex_mem_tags = ntags ;
           lex_actions = List.rev actions },args,shortest)
       def in
-  let chr = Array.of_list (List.rev !chars) in
-  chars := [];
+  let chr = Array.of_list (List.rev (DLS.get chars)) in
+  DLS.set chars [];
   (chr, entry_list)
 
 (* To generate directly a NFA from a regular expression.

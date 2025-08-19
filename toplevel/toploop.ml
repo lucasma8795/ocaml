@@ -405,7 +405,7 @@ let loop ppf =
       Lexing.flush_input lb;
       (* Reset the phrase buffer when we flush the lexing buffer. *)
       Buffer.reset phrase_buffer;
-      Location.reset();
+      Location.reset ();
       first_line := true;
       let phrs = get_phrases ppf lb [] in
       process_phrases ppf snap phrs
@@ -430,7 +430,7 @@ let prepare ppf ?input () =
   try
     let res =
       let objects =
-        List.rev (!preload_objects @ !Compenv.first_objfiles)
+        List.rev (!preload_objects @ DLS.get Compenv.first_objfiles)
       in
       List.for_all (Topeval.load_file false ppf) objects
     in

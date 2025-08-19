@@ -14,6 +14,7 @@
 (**************************************************************************)
 
 open Clflags
+open Local_store
 
 module DLS = Domain.DLS
 
@@ -54,14 +55,14 @@ let default_output = function
   | Some s -> s
   | None -> Config.default_executable_name
 
-let first_include_dirs = ref []
-let last_include_dirs = ref []
-let first_ccopts = ref []
-let last_ccopts = ref []
-let first_ppx = ref []
-let last_ppx = ref []
-let first_objfiles = ref []
-let last_objfiles = ref []
+let first_include_dirs = s_ref []
+let last_include_dirs = s_ref []
+let first_ccopts = s_ref []
+let last_ccopts = s_ref []
+let first_ppx = s_ref []
+let last_ppx = s_ref []
+let first_objfiles = s_ref []
+let last_objfiles = s_ref []
 let stop_early = ref false
 
 
@@ -401,9 +402,9 @@ let read_one_param ppf position name v =
 
   | "I" -> begin
       match position with
-      | Before_args -> first_include_dirs := v :: !first_include_dirs
+      | Before_args -> DLS.set first_include_dirs (v :: DLS.get first_include_dirs)
       | Before_link | Before_compile _ ->
-        last_include_dirs := v :: !last_include_dirs
+        DLS.set last_include_dirs (v :: DLS.get last_include_dirs)
     end
 
   | "cclib" ->
@@ -420,18 +421,18 @@ let read_one_param ppf position name v =
     begin
       match position with
       | Before_link | Before_compile _ ->
-        last_ccopts := v :: !last_ccopts
+        DLS.set last_ccopts (v :: DLS.get last_ccopts)
       | Before_args ->
-        first_ccopts := v :: !first_ccopts
+        DLS.set first_ccopts (v :: DLS.get first_ccopts)
     end
 
   | "ppx" ->
     begin
       match position with
       | Before_link | Before_compile _ ->
-        last_ppx := v :: !last_ppx
+        DLS.set last_ppx (v :: DLS.get last_ppx)
       | Before_args ->
-        first_ppx := v :: !first_ppx
+        DLS.set first_ppx (v :: DLS.get first_ppx)
     end
 
 
@@ -440,9 +441,9 @@ let read_one_param ppf position name v =
     begin
       match position with
       | Before_link | Before_compile _ ->
-        last_objfiles := v ::! last_objfiles
+        DLS.set last_objfiles (v :: DLS.get last_objfiles)
       | Before_args ->
-        first_objfiles := v :: !first_objfiles
+        DLS.set first_objfiles (v :: DLS.get first_objfiles)
     end
 
   | "cmx" | "cmxa" ->
@@ -450,9 +451,9 @@ let read_one_param ppf position name v =
     begin
       match position with
       | Before_link | Before_compile _ ->
-        last_objfiles := v ::! last_objfiles
+        DLS.set last_objfiles (v :: DLS.get last_objfiles)
       | Before_args ->
-        first_objfiles := v :: !first_objfiles
+        DLS.set first_objfiles (v :: DLS.get first_objfiles)
     end
 
   | "pic" ->
@@ -599,18 +600,18 @@ let apply_config_file ppf position =
     config
 
 let readenv ppf position =
-  last_include_dirs := [];
-  last_ccopts := [];
-  last_ppx := [];
-  last_objfiles := [];
+  DLS.set last_include_dirs [];
+  DLS.set last_ccopts [];
+  DLS.set last_ppx [];
+  DLS.set last_objfiles [];
   apply_config_file ppf position;
   read_OCAMLPARAM ppf position;
-  all_ccopts := !last_ccopts @ !first_ccopts;
-  all_ppx := !last_ppx @ !first_ppx
+  all_ccopts := DLS.get last_ccopts @ DLS.get first_ccopts;
+  all_ppx := DLS.get last_ppx @ DLS.get first_ppx
 
 let get_objfiles ~with_ocamlparam =
   if with_ocamlparam then
-    List.rev (!last_objfiles @ !objfiles @ !first_objfiles)
+    List.rev (DLS.get last_objfiles @ !objfiles @ DLS.get first_objfiles)
   else
     List.rev !objfiles
 

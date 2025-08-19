@@ -1131,11 +1131,11 @@ let show_config_variable_and_exit x =
       exit 2
 
 let get_build_path_prefix_map =
-  let init = ref false in
-  let map_cache = ref None in
+  let init = Local_store.s_ref false in
+  let map_cache = Local_store.s_ref None in
   fun () ->
-    if not !init then begin
-      init := true;
+    if not (DLS.get init) then begin
+      DLS.set init true;
       match Sys.getenv "BUILD_PATH_PREFIX_MAP" with
       | exception Not_found -> ()
       | encoded_map ->
@@ -1144,9 +1144,9 @@ let get_build_path_prefix_map =
               fatal_errorf
                 "Invalid value for the environment variable \
                  BUILD_PATH_PREFIX_MAP: %s" err
-          | Ok map -> map_cache := Some map
+          | Ok map -> DLS.set map_cache (Some map)
     end;
-    !map_cache
+    DLS.get map_cache
 
 let debug_prefix_map_flags () =
   if not Config.as_has_debug_prefix_map then

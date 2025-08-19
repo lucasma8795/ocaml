@@ -128,6 +128,7 @@ let find fn =
 
 let find_normalized_with_visibility fn =
   assert (not Config.merlin || Local_store.is_bound ());
+  (* Printexc.get_callstack 99 |> Printexc.raw_backtrace_to_string |> prerr_endline; *)
   perform (Find_normalized_with_visibility fn)
 
 let find_normalized fn = fst (find_normalized_with_visibility fn)

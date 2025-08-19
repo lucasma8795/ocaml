@@ -23,6 +23,7 @@ open Instruct
 open Opcodes
 open Cmo_format
 module String = Misc.Stdlib.String
+module DLS = Domain.DLS
 
 type error = Not_compatible_32 of (string * string)
 exception Error of error
@@ -55,26 +56,26 @@ let create_bigarray = Bigarray.Array1.create Bigarray.Char Bigarray.c_layout
 let copy_bigarray src dst size =
   Bigarray.Array1.(blit (sub src 0 size) (sub dst 0 size))
 
-let out_buffer = ref(create_bigarray 0)
-and out_position = ref 0
+let out_buffer = Local_store.s_table create_bigarray 0
+and out_position = Local_store.s_ref 0
 
 let extend_buffer needed =
-  let size = Bigarray.Array1.dim !out_buffer in
+  let size = Bigarray.Array1.dim (DLS.get out_buffer) in
   let new_size = ref(max size 16) (* we need new_size > 0 *) in
   while needed >= !new_size do new_size := 2 * !new_size done;
   let new_buffer = create_bigarray !new_size in
-  copy_bigarray !out_buffer new_buffer size;
-  out_buffer := new_buffer
+  copy_bigarray (DLS.get out_buffer) new_buffer size;
+  DLS.set out_buffer new_buffer
 
 let out_word b1 b2 b3 b4 =
-  let p = !out_position in
+  let p = DLS.get out_position in
   let open Bigarray.Array1 in
-  if p+3 >= dim !out_buffer then extend_buffer (p+3);
-  set !out_buffer p (Char.unsafe_chr b1);
-  set !out_buffer (p+1) (Char.unsafe_chr b2);
-  set !out_buffer (p+2) (Char.unsafe_chr b3);
-  set !out_buffer (p+3) (Char.unsafe_chr b4);
-  out_position := p + 4
+  if p+3 >= dim (DLS.get out_buffer) then extend_buffer (p+3);
+  set (DLS.get out_buffer) p (Char.unsafe_chr b1);
+  set (DLS.get out_buffer) (p+1) (Char.unsafe_chr b2);
+  set (DLS.get out_buffer) (p+2) (Char.unsafe_chr b3);
+  set (DLS.get out_buffer) (p+3) (Char.unsafe_chr b4);
+  DLS.set out_position (p + 4)
 
 let out opcode =
   out_word opcode 0 0 0
@@ -111,51 +112,51 @@ type label_definition =
     Label_defined of int
   | Label_undefined of (int * int) list
 
-let label_table  = ref ([| |] : label_definition array)
+let label_table = Local_store.s_ref ([||] : label_definition array)
 
 let extend_label_table needed =
-  let size = Array.length !label_table in
+  let size = Array.length (DLS.get label_table) in
   let new_size = ref(max size 16) (* we need new_size > 0 *) in
   while needed >= !new_size do new_size := 2 * !new_size done;
   let new_table = Array.make !new_size (Label_undefined []) in
-  Array.blit !label_table 0 new_table 0 (Array.length !label_table);
-  label_table := new_table
+  Array.blit (DLS.get label_table) 0 new_table 0 (Array.length (DLS.get label_table));
+  DLS.set label_table new_table
 
 let backpatch (pos, orig) =
-  let displ = (!out_position - orig) asr 2 in
+  let displ = (DLS.get out_position - orig) asr 2 in
   let open Bigarray.Array1 in
-  set !out_buffer pos (Char.unsafe_chr displ);
-  set !out_buffer (pos+1) (Char.unsafe_chr (displ asr 8));
-  set !out_buffer (pos+2) (Char.unsafe_chr (displ asr 16));
-  set !out_buffer (pos+3) (Char.unsafe_chr (displ asr 24))
+  set (DLS.get out_buffer) pos (Char.unsafe_chr displ);
+  set (DLS.get out_buffer) (pos+1) (Char.unsafe_chr (displ asr 8));
+  set (DLS.get out_buffer) (pos+2) (Char.unsafe_chr (displ asr 16));
+  set (DLS.get out_buffer) (pos+3) (Char.unsafe_chr (displ asr 24))
 
 let define_label lbl =
-  if lbl >= Array.length !label_table then extend_label_table lbl;
-  match (!label_table).(lbl) with
+  if lbl >= Array.length (DLS.get label_table) then extend_label_table lbl;
+  match (DLS.get label_table).(lbl) with
     Label_defined _ ->
       fatal_error "Emitcode.define_label"
   | Label_undefined patchlist ->
       List.iter backpatch patchlist;
-      (!label_table).(lbl) <- Label_defined !out_position
+      (DLS.get label_table).(lbl) <- Label_defined (DLS.get out_position)
 
 let out_label_with_orig orig lbl =
-  if lbl >= Array.length !label_table then extend_label_table lbl;
-  match (!label_table).(lbl) with
+  if lbl >= Array.length (DLS.get label_table) then extend_label_table lbl;
+  match (DLS.get label_table).(lbl) with
     Label_defined def ->
       out_int((def - orig) asr 2)
   | Label_undefined patchlist ->
-      (!label_table).(lbl) <-
-         Label_undefined((!out_position, orig) :: patchlist);
+      (DLS.get label_table).(lbl) <-
+         Label_undefined((DLS.get out_position, orig) :: patchlist);
       out_int 0
 
-let out_label l = out_label_with_orig !out_position l
+let out_label l = out_label_with_orig (DLS.get out_position) l
 
 (* Relocation information *)
 
-let reloc_info = ref ([] : (reloc_info * int) list)
+let reloc_info = Local_store.s_ref ([] : (reloc_info * int) list)
 
 let enter info =
-  reloc_info := (info, !out_position) :: !reloc_info
+  DLS.set reloc_info ((info, DLS.get out_position) :: DLS.get reloc_info)
 
 let slot_for_literal sc =
   enter (Reloc_literal (Symtable.transl_const sc));
@@ -183,34 +184,34 @@ and slot_for_c_prim name =
 
 (* Debugging events *)
 
-let events = ref ([] : debug_event list)
-let debug_dirs = ref String.Set.empty
+let events = Local_store.s_ref ([] : debug_event list)
+let debug_dirs = Local_store.s_ref String.Set.empty
 
 let record_event ev =
   let path = ev.ev_loc.Location.loc_start.Lexing.pos_fname in
   let abspath = Location.absolute_path path in
-  debug_dirs := String.Set.add (Filename.dirname abspath) !debug_dirs;
+  DLS.set debug_dirs (String.Set.add (Filename.dirname abspath) (DLS.get debug_dirs));
   if Filename.is_relative path then begin
     let cwd = Location.rewrite_absolute_path (Sys.getcwd ()) in
-    debug_dirs := String.Set.add cwd !debug_dirs;
+    DLS.set debug_dirs (String.Set.add cwd (DLS.get debug_dirs));
   end;
-  ev.ev_pos <- !out_position;
-  events := ev :: !events
+  ev.ev_pos <- DLS.get out_position;
+  DLS.set events (ev :: DLS.get events)
 
 (* Initialization *)
 
-let clear() =
-  out_position := 0;
-  label_table := [||];
-  reloc_info := [];
-  debug_dirs := String.Set.empty;
-  events := [];
-  out_buffer := create_bigarray 0
+let clear () =
+  DLS.set out_position 0;
+  DLS.set label_table [||];
+  DLS.set reloc_info [];
+  DLS.set debug_dirs String.Set.empty;
+  DLS.set events [];
+  DLS.set out_buffer (create_bigarray 0)
 
 let init () =
   clear ();
-  label_table := Array.make 16 (Label_undefined []);
-  out_buffer := create_bigarray 1024
+  DLS.set label_table (Array.make 16 (Label_undefined []));
+  DLS.set out_buffer (create_bigarray 1024)
 
 (* Emission of one instruction *)
 
@@ -250,7 +251,7 @@ let emit_instr = function
   | Kclosure(lbl, n) -> out opCLOSURE; out_int n; out_label lbl
   | Kclosurerec(lbls, n) ->
       out opCLOSUREREC; out_int (List.length lbls); out_int n;
-      let org = !out_position in
+      let org = DLS.get out_position in
       List.iter (out_label_with_orig org) lbls
   | Koffsetclosure ofs ->
       if ofs = -3 || ofs = 0 || ofs = 3
@@ -298,7 +299,7 @@ let emit_instr = function
   | Kswitch(tbl_const, tbl_block) ->
       out opSWITCH;
       out_int (Array.length tbl_const + (Array.length tbl_block lsl 16));
-      let org = !out_position in
+      let org = DLS.get out_position in
       Array.iter (out_label_with_orig org) tbl_const;
       Array.iter (out_label_with_orig org) tbl_block
   | Kboolnot -> out opBOOLNOT
@@ -420,34 +421,34 @@ let rec emit = function
 (* Emission to a file *)
 
 let to_file outchan artifact_info ~required_globals code =
-  init();
+  init ();
   Fun.protect ~finally:clear (fun () ->
   output_string outchan cmo_magic_number;
   let pos_depl = pos_out outchan in
   output_binary_int outchan 0;
   let pos_code = pos_out outchan in
   emit code;
-  Out_channel.output_bigarray outchan !out_buffer 0 !out_position;
+  Out_channel.output_bigarray outchan (DLS.get out_buffer) 0 (DLS.get out_position);
   let (pos_debug, size_debug) =
     if !Clflags.debug then begin
       let filename = Unit_info.Artifact.filename artifact_info in
-      debug_dirs := String.Set.add
+      DLS.set debug_dirs (String.Set.add
           (Filename.dirname (Location.absolute_path filename))
-        !debug_dirs;
+        (DLS.get debug_dirs));
       let p = pos_out outchan in
-      Compression.output_value outchan !events;
-      Compression.output_value outchan (String.Set.elements !debug_dirs);
+      Compression.output_value outchan (DLS.get events);
+      Compression.output_value outchan (String.Set.elements (DLS.get debug_dirs));
       (p, pos_out outchan - p)
     end else
       (0, 0) in
   let compunit =
     { cu_name = Cmo_format.Compunit (Unit_info.Artifact.modname artifact_info);
       cu_pos = pos_code;
-      cu_codesize = !out_position;
-      cu_reloc = List.rev !reloc_info;
+      cu_codesize = DLS.get out_position;
+      cu_reloc = List.rev (DLS.get reloc_info);
       cu_imports = Env.imports();
       cu_primitives = List.map Primitive.byte_name
-                               !Translmod.primitive_declarations;
+                               (DLS.get Translmod.primitive_declarations);
       cu_required_compunits = List.map (fun id -> Compunit (Ident.name id))
         (Ident.Set.elements required_globals);
       cu_force_link = !Clflags.link_everything;
@@ -469,13 +470,13 @@ let to_file outchan artifact_info ~required_globals code =
 (* Emission to a memory block *)
 
 let to_memory instrs =
-  init();
+  init ();
   Fun.protect ~finally:clear (fun () ->
   emit instrs;
-  let code = create_bigarray !out_position in
-  copy_bigarray !out_buffer code !out_position;
-  let reloc = List.rev !reloc_info in
-  let events = !events in
+  let code = create_bigarray (DLS.get out_position) in
+  copy_bigarray (DLS.get out_buffer) code (DLS.get out_position);
+  let reloc = List.rev (DLS.get reloc_info) in
+  let events = DLS.get events in
   (code, reloc, events))
 
 (* Emission to a file for a packed library *)
@@ -484,9 +485,9 @@ let to_packed_file outchan code =
   init ();
   Fun.protect ~finally:clear (fun () ->
   emit code;
-  Out_channel.output_bigarray outchan !out_buffer 0 !out_position;
-  let reloc = List.rev !reloc_info in
-  let events = !events in
-  let debug_dirs = !debug_dirs in
-  let size = !out_position in
+  Out_channel.output_bigarray outchan (DLS.get out_buffer) 0 (DLS.get out_position);
+  let reloc = List.rev (DLS.get reloc_info) in
+  let events = DLS.get events in
+  let debug_dirs = DLS.get debug_dirs in
+  let size = DLS.get out_position in
   (size, reloc, events, debug_dirs))

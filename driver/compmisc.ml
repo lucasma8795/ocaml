@@ -13,6 +13,8 @@
 (*                                                                        *)
 (**************************************************************************)
 
+module DLS = Domain.DLS
+
 let auto_include find_in_dir fn =
   if !Clflags.no_std_include then
     raise Not_found
@@ -37,12 +39,12 @@ let init_path ?(standard_library=Config.standard_library)
   in
   let visible =
     List.concat
-      [!Compenv.last_include_dirs;
+      [DLS.get Compenv.last_include_dirs;
        visible;
        (* Config.flexdll_dirs is either [] or ["+flexdll"]: don't include a
           reference to the Standard Library when -nostdlib was specified. *)
        (if !Clflags.no_std_include then [] else Config.flexdll_dirs);
-       !Compenv.first_include_dirs]
+       DLS.get Compenv.first_include_dirs]
   in
   let visible =
     List.map (Misc.expand_directory standard_library) visible

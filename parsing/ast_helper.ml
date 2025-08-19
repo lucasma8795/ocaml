@@ -29,7 +29,7 @@ type str = string with_loc
 type str_opt = string option with_loc
 type attrs = attribute list
 
-let default_loc = DLS.new_key (fun () -> Location.none)
+let default_loc = Local_store.s_ref Location.none
 
 let with_default_loc l f =
   Misc.protect_refs [Misc.R' (default_loc, l)] f

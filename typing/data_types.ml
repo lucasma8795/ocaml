@@ -65,9 +65,35 @@ let may_equal_constr c1 c2 =
          equal_tag tag1 tag2)
 
 let cstr_res_type_path cstr =
+  let dbg s = Printf.eprintf "%d -> %s\n%!" (Domain.self () :> int) s in
+  let rec pp_path (p : Path.t) =
+    match p with
+    | Pident id -> Ident.to_string id
+    | Pdot(p, s) | Pextra_ty (p, Pcstr_ty s) ->
+        Printf.sprintf "%s.%s" (pp_path p) s
+    | Papply(p1, p2) -> Printf.sprintf "%s(%s)" (pp_path p1) (pp_path p2)
+    | Pextra_ty (p, Pext_ty) -> pp_path p
+  in
   match get_desc cstr.cstr_res with
-  | Tconstr (p, _, _) -> p
-  | _ -> assert false
+  | Tconstr(p, _, _) -> p
+  | Tsubst (expr, None) -> begin
+      match expr.desc with
+      | Tconstr (path, _, _) -> dbg (Printf.sprintf "got Tsubst (Tconstr (%s, ?, ?), None)" (pp_path path)); assert false
+      | Tvar None -> dbg "got Tsubst (Tvar None, None)"; assert false
+      | Tvar (Some id) -> dbg (Printf.sprintf "got Tsubst (Tvar (%s), None)" id); assert false
+      | Ttuple _ -> dbg "got Tsubst (Ttuple _, None)"; assert false
+      | Tobject _ -> dbg "got Tsubst (Tobject _, None)"; assert false
+      | Tfield _ -> dbg "got Tsubst (Tfield _, None)"; assert false
+      | Tnil -> dbg "got Tsubst (Tnil, None)"; assert false
+      | Tlink _ -> dbg "got Tsubst (Tlink _, None)"; assert false
+      | Tsubst _ -> dbg "got Tsubst (Tsubst _, None)"; assert false
+      | Tvariant _ -> dbg "got Tsubst (Tvariant _, None)"; assert false
+      | Tunivar _ -> dbg "got Tsubst (Tunivar _, None)"; assert false
+      | Tpoly _ -> dbg "got Tsubst (Tpoly _, None)"; assert false
+      | Tpackage _ -> dbg "got Tsubst (Tpackage _, None)"; assert false
+      | _ -> dbg "got Tsubst (<something else>, None)"; assert false
+    end
+  | _ -> dbg "got something else"; assert false
 
 type label_description =
   { lbl_name: string;                   (* Short name *)

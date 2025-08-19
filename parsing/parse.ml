@@ -19,7 +19,7 @@ module DLS = Domain.DLS
 
 (* Skip tokens to the end of the phrase *)
 
-let last_token = DLS.new_key (fun () -> Parser.EOF)
+let last_token = Local_store.s_ref Parser.EOF
 
 let token lexbuf =
   let token = Lexer.token lexbuf in

@@ -31,7 +31,7 @@ type t =
 
 (* A stamp of 0 denotes a persistent identifier *)
 
-let to_string = function
+(* let to_string = function
   | Local { name; stamp } ->
       Printf.sprintf "Local (%s/%d)" name stamp
   | Scoped { name; stamp; scope } ->
@@ -39,7 +39,7 @@ let to_string = function
   | Global name ->
       Printf.sprintf "Global (%s)" name
   | Predef { name; stamp } ->
-      Printf.sprintf "Predef (%s/%d)" name stamp
+      Printf.sprintf "Predef (%s/%d)" name stamp *)
 let currentstamp = s_ref 0
 let predefstamp = s_ref 0
 
@@ -131,12 +131,12 @@ let scope = function
   | Local _ -> highest_scope
   | Global _ | Predef _ -> lowest_scope
 
-let reinit_level = ref (-1)
+let reinit_level = Local_store.s_ref (-1)
 
 let reinit () =
-  if !reinit_level < 0
-  then reinit_level := DLS.get currentstamp
-  else DLS.set currentstamp !reinit_level
+  if DLS.get reinit_level < 0
+  then DLS.set reinit_level (DLS.get currentstamp)
+  else DLS.set currentstamp (DLS.get reinit_level)
 
 let global = function
   | Local _
@@ -191,6 +191,30 @@ let print ~with_scope ppf =
       fprintf ppf "%a%s"
         pp_stamped (name, stamp)
         (if with_scope then asprintf "[%i]" scope else "")
+
+let to_string =
+  let pp_stamped (name, stamp) =
+    if not !Clflags.unique_ids then
+      Printf.sprintf "%s" name
+    else begin
+      let stamp =
+        if not !Clflags.canonical_ids then stamp
+        else canonicalize name stamp
+      in
+      Printf.sprintf "%s/%i" name stamp
+    end
+  in
+  function
+  | Global name ->
+      Printf.sprintf "%s!" name
+  | Predef { name; stamp } ->
+      Printf.sprintf "%s!" (pp_stamped (name, stamp))
+  | Local { name; stamp } ->
+      Printf.sprintf "%s" (pp_stamped (name, stamp))
+  | Scoped { name; stamp; scope } ->
+      Printf.sprintf "%s%s"
+        (pp_stamped (name, stamp))
+        (Printf.sprintf "[%i]" scope)
 
 let print_with_scope ppf id = print ~with_scope:true ppf id
 

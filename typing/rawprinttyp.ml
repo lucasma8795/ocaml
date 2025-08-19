@@ -19,6 +19,7 @@
 open Format
 open Types
 open Asttypes
+module DLS = Domain.DLS
 let longident = Pprintast.longident
 
 let raw_list pr ppf = function
@@ -27,8 +28,8 @@ let raw_list pr ppf = function
       fprintf ppf "@[<1>[%a%t]@]" pr a
         (fun ppf -> List.iter (fun x -> fprintf ppf ";@,%a" pr x) l)
 
-let kind_vars = ref []
-let kind_count = ref 0
+let kind_vars = Local_store.s_ref []
+let kind_count = Local_store.s_ref 0
 
 let string_of_field_kind v =
   match field_kind_repr v with
@@ -53,11 +54,11 @@ let print_name ppf = function
 
 let path = Format_doc.compat Path.print
 
-let visited = ref []
+let visited = Local_store.s_ref []
 let rec raw_type ppf ty =
   let ty = safe_repr [] ty in
-  if List.memq ty !visited then fprintf ppf "{id=%d}" ty.id else begin
-    visited := ty :: !visited;
+  if List.memq ty (DLS.get visited) then fprintf ppf "{id=%d}" ty.id else begin
+    DLS.set visited (ty :: DLS.get visited);
     fprintf ppf "@[<1>{id=%d;level=%d;scope=%d;marks=%x;desc=@,%a}@]"
       ty.id ty.level
       (Transient_expr.get_scope ty) (Transient_expr.get_marks ty)
@@ -152,6 +153,9 @@ and raw_field ppf rf =
     rf
 
 let type_expr ppf t =
-  visited := []; kind_vars := []; kind_count := 0;
+  DLS.set visited [];
+  DLS.set kind_vars [];
+  DLS.set kind_count 0;
   raw_type ppf t;
-  visited := []; kind_vars := []
+  DLS.set visited [];
+  DLS.set kind_vars []

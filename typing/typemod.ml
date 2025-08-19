@@ -2301,7 +2301,7 @@ let package_subtype env pack1 pack2 =
         let msg = doc_printf "%a" Includemod_errorprinter.err_msgs e in
         Result.Error (Errortrace.Package_inclusion msg)
 
-let () = Ctype.package_subtype := package_subtype
+let () = DLS.set Ctype.package_subtype package_subtype
 
 let wrap_constraint_package env mark arg mty explicit =
   let mty1 = Subst.modtype Keep Subst.identity arg.mod_type in
@@ -2753,6 +2753,37 @@ and type_structure ?(toplevel = false) ~funct_body anchor env sstr =
     Cmt_format.set_saved_types
       (Cmt_format.Partial_structure str :: previous_saved_types);
     str, sg, names, Shape.str shape_map, final_env
+  in
+
+  let run =
+    let m = Mutex.create () in
+    let locked = ref false in
+    let lock () = Mutex.lock m; locked := true in
+    let unlock () = if !locked then Mutex.unlock m; locked := false in
+    fun () -> begin
+      (* let _ = Sys.command "ps | pgrep ocamlrun > pid" in
+      let chan = open_in "pid" in
+      begin match int_of_string (input_line chan) with
+        | pid -> Printf.eprintf "entering run () with pid %d, locking\n%!" pid
+        | exception _ -> Printf.eprintf "entering run () (pid unknown?), locking\n%!"
+      end;
+      close_in chan; *)
+      lock ();
+      let ret = begin match run () with
+      | ret -> unlock (); ret
+      | effect (Load_path.Find_path path), k ->
+        unlock ();
+        let ret = Effect.perform (Load_path.Find_path path) in
+        lock ();
+        Effect.Deep.continue k ret
+      | effect (Load_path.Find_normalized_with_visibility path), k ->
+        unlock ();
+        let ret = Effect.perform (Load_path.Find_normalized_with_visibility path) in
+        lock ();
+        Effect.Deep.continue k ret
+      end in
+      ret
+    end
   in
   if toplevel then run ()
   else Builtin_attributes.warning_scope [] run
@@ -3262,15 +3293,14 @@ let type_str_item env pstri =
 let () =
   Typecore.type_module := type_module_alias;
   Typecore.type_str_item := type_str_item;
-  DLS.set Typetexp.transl_modtype_longident transl_modtype_longident;
-  DLS.set Typetexp.transl_modtype transl_modtype;
   Typecore.type_open := type_open_ ?toplevel:None;
   Typetexp.type_open := type_open_ ?toplevel:None;
   Typecore.type_open_decl := type_open_decl;
   Typecore.type_package := type_package;
   Typeclass.type_open_descr := type_open_descr;
-  type_module_type_of_fwd := type_module_type_of
-
+  type_module_type_of_fwd := type_module_type_of;
+  DLS.set Typetexp.transl_modtype_longident transl_modtype_longident;
+  DLS.set Typetexp.transl_modtype transl_modtype
 
 (* Typecheck an implementation file *)
 
@@ -3317,10 +3347,10 @@ let type_implementation target initial_env ast =
         } (* result is ignored by Compile.implementation *)
       end else begin
         let source_intf = Unit_info.mli_from_source target in
-        if !Clflags.cmi_file <> None
+        if DLS.get Clflags.cmi_file <> None
         || Sys.file_exists source_intf then begin
           let compiled_intf_file =
-            match !Clflags.cmi_file with
+            match DLS.get Clflags.cmi_file with
             | Some cmi_file -> Unit_info.Artifact.from_filename cmi_file
             | None ->
                 try Unit_info.find_normalized_cmi target with Not_found ->

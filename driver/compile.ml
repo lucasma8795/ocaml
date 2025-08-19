@@ -28,6 +28,8 @@ let interface ~source_file ~output_prefix =
 
 (** Bytecode compilation backend for .ml files. *)
 
+let lock = Mutex.create ()
+
 let to_bytecode i Typedtree.{structure; coercion; _} =
   (structure, coercion)
   |> Profile.(record transl)
@@ -71,8 +73,10 @@ let emit_bytecode i (bytecode, required_globals) =
 
 let implementation ~start_from ~source_file ~output_prefix =
   let backend info typed =
-    let bytecode = to_bytecode info typed in
-    emit_bytecode info bytecode
+    Mutex.protect lock (fun () ->
+      let bytecode = to_bytecode info typed in
+      emit_bytecode info bytecode
+    )
   in
   let unit_info = Unit_info.make ~source_file Impl output_prefix in
   let info_function = fun info ->

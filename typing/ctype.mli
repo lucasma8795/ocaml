@@ -482,7 +482,7 @@ val immediacy : Env.t -> type_expr -> Type_immediacy.t
 (* Stubs *)
 val package_subtype :
     (Env.t -> package -> package ->
-     (unit,Errortrace.first_class_module) Result.t) ref
+     (unit,Errortrace.first_class_module) Result.t) Domain.DLS.key
 
 (* Raises [Incompatible] *)
 val mcomp : Env.t -> type_expr -> type_expr -> unit

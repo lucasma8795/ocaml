@@ -17,8 +17,6 @@
 
 type t
 
-val to_string : t -> string
-
 include Identifiable.S with type t := t
 (* Notes:
    - [equal] compares identifiers by name
@@ -117,3 +115,5 @@ val remove: t -> 'a tbl -> 'a tbl
 (* Idents for sharing keys *)
 
 val make_key_generator : unit -> (t -> t)
+
+val to_string : t -> string

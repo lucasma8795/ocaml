@@ -20,6 +20,7 @@ open Config
 open Cmo_format
 
 module Compunit = Symtable.Compunit
+module DLS = Domain.DLS
 
 module Dep = struct
   type t = compunit * compunit
@@ -52,9 +53,9 @@ type link_action =
 (* Add C objects and options from a library descriptor *)
 (* Ignore them if -noautolink or -use-runtime or -use-prim was given *)
 
-let lib_ccobjs = ref []
-let lib_ccopts = ref []
-let lib_dllibs = ref []
+let lib_ccobjs = Local_store.s_ref []
+let lib_ccopts = Local_store.s_ref []
+let lib_dllibs = Local_store.s_ref []
 
 let add_ccobjs obj_name origin l =
   if not !Clflags.no_auto_link then begin
@@ -63,14 +64,14 @@ let add_ccobjs obj_name origin l =
       && String.length !Clflags.use_prims = 0
     then begin
       if l.lib_custom then Clflags.custom_runtime := true;
-      lib_ccobjs := l.lib_ccobjs @ !lib_ccobjs;
+      DLS.set lib_ccobjs (l.lib_ccobjs @ DLS.get lib_ccobjs);
       let replace_origin =
         Misc.replace_substring ~before:"$CAMLORIGIN" ~after:origin
       in
-      lib_ccopts := List.map replace_origin l.lib_ccopts @ !lib_ccopts;
+      DLS.set lib_ccopts (List.map replace_origin l.lib_ccopts @ DLS.get lib_ccopts);
     end else if l.lib_custom then
       raise(Error(Needs_custom_runtime obj_name));
-    lib_dllibs := l.lib_dllibs @ !lib_dllibs
+    DLS.set lib_dllibs (l.lib_dllibs @ DLS.get lib_dllibs);
   end
 
 (* A note on ccobj ordering:
@@ -169,17 +170,17 @@ let scan_file ldeps obj_name tolink =
 
 module Consistbl = Consistbl.Make (Misc.Stdlib.String)
 
-let crc_interfaces = Consistbl.create ()
-let interfaces = ref ([] : string list)
+let crc_interfaces = Local_store.s_table Consistbl.create ()
+let interfaces = Local_store.s_ref ([] : string list)
 
 let check_consistency file_name cu =
   try
     List.iter
       (fun (name, crco) ->
-        interfaces := name :: !interfaces;
+        DLS.set interfaces (name :: DLS.get interfaces);
         match crco with
           None -> ()
-        | Some crc -> Consistbl.check crc_interfaces name crc file_name)
+        | Some crc -> Consistbl.check (DLS.get crc_interfaces) name crc file_name)
       cu.cu_imports
   with Consistbl.Inconsistency {
       unit_name = name;
@@ -189,15 +190,15 @@ let check_consistency file_name cu =
     raise(Error(Inconsistent_import(name, user, auth)))
 
 let extract_crc_interfaces () =
-  Consistbl.extract !interfaces crc_interfaces
+  Consistbl.extract (DLS.get interfaces) (DLS.get crc_interfaces)
 
 let clear_crc_interfaces () =
-  Consistbl.clear crc_interfaces;
-  interfaces := []
+  Consistbl.clear (DLS.get crc_interfaces);
+  DLS.set interfaces []
 
 (* Record compilation events *)
 
-let debug_info = ref ([] : (int * Instruct.debug_event list * string list) list)
+let debug_info = Local_store.s_ref ([] : (int * Instruct.debug_event list * string list) list)
 
 (* Link in a compilation unit *)
 
@@ -224,7 +225,8 @@ let link_compunit output_fun currpos_fun inchan file_name compunit =
       if List.mem file_path debug_dirs
       then debug_dirs
       else file_path :: debug_dirs in
-    debug_info := (currpos_fun(), debug_event_list, debug_dirs) :: !debug_info
+    DLS.set debug_info
+      ((currpos_fun (), debug_event_list, debug_dirs) :: DLS.get debug_info)
   end;
   output_fun code_block;
   if !Clflags.link_everything then
@@ -278,14 +280,14 @@ let link_file output_fun currpos_fun = function
       <output_value>   last event list *)
 
 let output_debug_info oc =
-  output_binary_int oc (List.length !debug_info);
+  output_binary_int oc (List.length (DLS.get debug_info));
   List.iter
     (fun (ofs, evl, debug_dirs) ->
       output_binary_int oc ofs;
       output_value oc evl;
       output_value oc debug_dirs)
-    !debug_info;
-  debug_info := []
+    (DLS.get debug_info);
+  DLS.set debug_info []
 
 (* Transform a file name into an absolute file name *)
 
@@ -536,7 +538,7 @@ let link_bytecode ?final_name tolink exec_name standalone =
 
 (* Output a string as a C array of unsigned ints *)
 
-let output_code_string_counter = ref 0
+let output_code_string_counter = Local_store.s_ref 0
 
 let output_code_string outchan code =
   let pos = ref 0 in
@@ -548,10 +550,10 @@ let output_code_string outchan code =
     let c4 = Char.code(Bigarray.Array1.get code (!pos + 3)) in
     pos := !pos + 4;
     Printf.fprintf outchan "0x%02x%02x%02x%02x, " c4 c3 c2 c1;
-    incr output_code_string_counter;
-    if !output_code_string_counter >= 6 then begin
+    DLS.set output_code_string_counter (DLS.get output_code_string_counter + 1);
+    if DLS.get output_code_string_counter >= 6 then begin
       output_char outchan '\n';
-      output_code_string_counter := 0
+      DLS.set output_code_string_counter 0
     end
   done
 
@@ -772,10 +774,10 @@ let link objfiles output_name =
   (match Linkdeps.check ldeps with
    | None -> ()
    | Some e -> raise (Error (Link_error e)));
-  Clflags.ccobjs := !Clflags.ccobjs @ !lib_ccobjs; (* put user's libs last *)
-  Clflags.all_ccopts := !lib_ccopts @ !Clflags.all_ccopts;
+  Clflags.ccobjs := !Clflags.ccobjs @ DLS.get lib_ccobjs; (* put user's libs last *)
+  Clflags.all_ccopts := DLS.get lib_ccopts @ !Clflags.all_ccopts;
                                                    (* put user's opts first *)
-  Clflags.dllibs := !lib_dllibs @ !Clflags.dllibs; (* put user's DLLs first *)
+  Clflags.dllibs := DLS.get lib_dllibs @ !Clflags.dllibs; (* put user's DLLs first *)
   if not !Clflags.custom_runtime then
     link_bytecode tolink output_name true
   else if not !Clflags.output_c_object then begin
@@ -923,9 +925,9 @@ let () =
 let report_error = Format_doc.compat report_error_doc
 
 let reset () =
-  lib_ccobjs := [];
-  lib_ccopts := [];
-  lib_dllibs := [];
-  Consistbl.clear crc_interfaces;
-  debug_info := [];
-  output_code_string_counter := 0
+  DLS.set lib_ccobjs [];
+  DLS.set lib_ccopts [];
+  DLS.set lib_dllibs [];
+  Consistbl.clear (DLS.get crc_interfaces);
+  DLS.set debug_info [];
+  DLS.set output_code_string_counter 0

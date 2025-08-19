@@ -16,6 +16,8 @@
 open Misc
 open Asttypes
 
+module DLS = Domain.DLS
+
 type compile_time_constant =
   | Big_endian
   | Word_size
@@ -672,11 +674,12 @@ and free_variables_list set exprs =
     set exprs
 
 (* Check if an action has a "when" guard *)
-let raise_count = ref 0
+let raise_count = Local_store.s_ref 0
 
 let next_raise_count () =
-  incr raise_count ;
-  !raise_count
+  let ret = DLS.get raise_count + 1 in
+  DLS.set raise_count ret;
+  ret
 
 (* Anticipated staticraise, for guards *)
 let staticfail = Lstaticraise (0,[])
@@ -1072,4 +1075,4 @@ let find_exact_application kind ~arity args =
       end
 
 let reset () =
-  raise_count := 0
+  DLS.set raise_count 0

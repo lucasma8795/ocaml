@@ -774,7 +774,6 @@ let components_of_module_maker' =
           components_maker ->
             (module_components_repr, module_components_failure) result)
 
-(* todo: make dls *)
 let components_of_functor_appl' =
   ref ((fun ~loc:_ ~f_path:_ ~f_comp:_ ~arg:_ _env -> assert false) :
           loc:Location.t -> f_path:Path.t -> f_comp:functor_components ->
@@ -821,7 +820,7 @@ module Current_unit : sig
     val is_path : Path.t -> bool
   end
 end = struct
-  let current_unit : Unit_info.t option DLS.key = s_ref None
+  let current_unit = s_ref (None : Unit_info.t option)
   let get () =
     DLS.get current_unit
   let set cu =
@@ -1520,7 +1519,7 @@ let make_copy_of_types env0 =
    not yet evaluated structures) *)
 
 type iter_cont = unit -> unit
-let iter_env_cont = ref []
+let iter_env_cont = Local_store.s_ref []
 
 let rec scrape_alias_for_visit env mty =
   let open Subst.Lazy in
@@ -1560,7 +1559,8 @@ let iter_env wrap proj1 proj2 f env () =
                 (Pdot (path, s)) (Pdot (path', s)) mda.mda_components)
             comps.comp_modules
       | Functor_comps _ -> ()
-    in iter_env_cont := (path, cont) :: !iter_env_cont
+    in
+    DLS.set iter_env_cont ((path, cont) :: DLS.get iter_env_cont)
   in
   IdTbl.iter wrap_module
     (fun id (path, entry) ->
@@ -1577,10 +1577,10 @@ let iter_env wrap proj1 proj2 f env () =
     env.modules
 
 let run_iter_cont l =
-  iter_env_cont := [];
+  DLS.set iter_env_cont [];
   List.iter (fun c -> c ()) l;
-  let cont = List.rev !iter_env_cont in
-  iter_env_cont := [];
+  let cont = List.rev (DLS.get iter_env_cont) in
+  DLS.set iter_env_cont [];
   cont
 
 let iter_types f =

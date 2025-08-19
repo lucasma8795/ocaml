@@ -54,6 +54,7 @@ end = struct
 end
 
 let prepend_to_list l e = l := e :: !l
+let prepend_to_list_2 l e = DLS.set l (e :: DLS.get l)
 
 (* Fix path to use '/' as directory separator instead of '\'.
    Only under Windows. *)
@@ -380,14 +381,14 @@ let ml_file_dependencies source_file =
     read_parse_and_extract parse_use_file_as_impl Depend.add_implementation ()
                            Pparse.Structure source_file
   in
-  prepend_to_list files (source_file, ML, extracted_deps, Domain.DLS.get Depend.pp_deps)
+  prepend_to_list files (source_file, ML, extracted_deps, DLS.get Depend.pp_deps)
 
 let mli_file_dependencies source_file =
   let (extracted_deps, ()) =
     read_parse_and_extract Parse.interface Depend.add_signature ()
                            Pparse.Signature source_file
   in
-  prepend_to_list files (source_file, MLI, extracted_deps, Domain.DLS.get Depend.pp_deps)
+  prepend_to_list files (source_file, MLI, extracted_deps, DLS.get Depend.pp_deps)
 
 let process_file_as process_fun def source_file =
   Compenv.readenv stderr (Before_compile source_file);
@@ -395,9 +396,9 @@ let process_file_as process_fun def source_file =
   let cwd = if !nocwd then [] else [Filename.current_dir_name] in
   List.iter add_to_load_path (
       (!Clflags.hidden_include_dirs @
-       !Compenv.last_include_dirs @
+       DLS.get Compenv.last_include_dirs @
        !Clflags.include_dirs @
-       !Compenv.first_include_dirs @
+       DLS.get Compenv.first_include_dirs @
        cwd
       ));
   DLS.set Location.input_name source_file;
@@ -618,7 +619,7 @@ let run_main argv =
         "<plugin>  (no longer supported)";
       "-pp", Arg.String(fun s -> Clflags.preprocessor := Some s),
         "<cmd>  Pipe sources through preprocessor <cmd>";
-      "-ppx", Arg.String (prepend_to_list Compenv.first_ppx),
+      "-ppx", Arg.String (prepend_to_list_2 Compenv.first_ppx),
         "<cmd>  Pipe abstract syntax trees through preprocessor <cmd>";
       "-shared", Arg.Set shared,
         " Generate dependencies for native plugin files (.cmxs targets)";

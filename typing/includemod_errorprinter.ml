@@ -241,13 +241,14 @@ end
 
 module Err = Includemod.Error
 
-let buffer = ref Bytes.empty
+let buffer = Local_store.s_ref Bytes.empty
 let is_big obj =
   let size = !Clflags.error_size in
   size > 0 &&
   begin
-    if Bytes.length !buffer < size then buffer := Bytes.create size;
-    try ignore (Marshal.to_buffer !buffer 0 size obj []); false
+    if Bytes.length (DLS.get buffer) < size then
+      DLS.set buffer (Bytes.create size);
+    try ignore (Marshal.to_buffer (DLS.get buffer) 0 size obj []); false
     with _ -> true
   end
 

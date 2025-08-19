@@ -875,18 +875,18 @@ let attribute_of_warning loc s =
     {loc; txt = "ocaml.ppwarning" }
     (PStr ([Str.eval ~loc (Exp.constant (Const.string ~loc s))]))
 
-let cookies = ref String.Map.empty
+let cookies = Local_store.s_ref String.Map.empty
 
 let get_cookie k =
-  try Some (String.Map.find k !cookies)
+  try Some (String.Map.find k (DLS.get cookies))
   with Not_found -> None
 
 let set_cookie k v =
-  cookies := String.Map.add k v !cookies
+  DLS.set cookies (String.Map.add k v (DLS.get cookies))
 
-let tool_name_ref = ref "_none_"
+let tool_name_ref = Local_store.s_ref "_none_"
 
-let tool_name () = !tool_name_ref
+let tool_name () = DLS.get tool_name_ref
 
 
 module PpxContext = struct
@@ -922,7 +922,7 @@ module PpxContext = struct
   let get_cookies () =
     lid "cookies",
     make_list (make_pair make_string (fun x -> x))
-      (String.Map.bindings !cookies)
+      (String.Map.bindings (DLS.get cookies))
 
   let mk fields =
     {
@@ -1011,7 +1011,7 @@ module PpxContext = struct
       in
       match name with
       | "tool_name" ->
-          tool_name_ref := get_string payload
+          DLS.set tool_name_ref (get_string payload)
       | "include_dirs" ->
           Clflags.include_dirs := get_list get_string payload
       | "hidden_include_dirs" ->
@@ -1051,10 +1051,10 @@ module PpxContext = struct
           Clflags.unboxed_types := get_bool payload
       | "cookies" ->
           let l = get_list (get_pair get_string (fun x -> x)) payload in
-          cookies :=
-            List.fold_left
+          DLS.set cookies
+            (List.fold_left
               (fun s (k, v) -> String.Map.add k v s) String.Map.empty
-              l
+              l)
       | _ ->
           ()
     in
@@ -1202,5 +1202,5 @@ let run_main mapper =
     prerr_endline (Printexc.to_string exn);
     exit 2
 
-let register_function = DLS.new_key (fun () _name f -> run_main f)
+let register_function = Local_store.s_ref (fun _name f -> run_main f)
 let register name f = (DLS.get register_function) name f

@@ -27,6 +27,8 @@ open Translcore
 open Translclass
 open Debuginfo.Scoped_location
 
+module DLS = Domain.DLS
+
 type unsafe_component =
   | Unsafe_module_binding
   | Unsafe_functor
@@ -214,11 +216,12 @@ let compose_coercions c1 c2 =
 
 (* Record the primitive declarations occurring in the module compiled *)
 
-let primitive_declarations = ref ([] : Primitive.description list)
+let primitive_declarations =
+  Local_store.s_ref ([] : Primitive.description list)
 let record_primitive = function
   | {val_kind=Val_prim p;val_loc} ->
       Translprim.check_primitive_arity val_loc p;
-      primitive_declarations := p :: !primitive_declarations
+      DLS.set primitive_declarations (p :: DLS.get primitive_declarations)
   | _ -> ()
 
 (* Utilities for compiling "module rec" definitions *)
@@ -794,7 +797,7 @@ let module_block_size component_names coercion =
 
 let transl_implementation_flambda module_name (str, cc) =
   reset_labels ();
-  primitive_declarations := [];
+  DLS.set primitive_declarations [];
   Translprim.clear_used_primitives ();
   let module_id = Ident.create_persistent module_name in
   let scopes = enter_module_definition ~scopes:empty_scopes module_id in
@@ -955,12 +958,12 @@ and all_idents = function
    "map" is a table from defined idents to (pos in global block, coercion).
    "prim" is a list of (pos in global block, primitive declaration). *)
 
-let transl_store_subst = ref Ident.Map.empty
+let transl_store_subst = Local_store.s_ref Ident.Map.empty
   (** In the native toplevel, this reference is threaded through successive
       calls of transl_store_structure *)
 
 let nat_toplevel_name id =
-  try match Ident.Map.find id !transl_store_subst with
+  try match Ident.Map.find id (DLS.get transl_store_subst) with
     | Lprim(Pfield (pos, _, _),
             [Lprim(Pgetglobal glob, [], _)], _) -> (glob,pos)
     | _ -> raise Not_found
@@ -983,7 +986,7 @@ let transl_store_structure ~scopes glob map prims aliases str =
   let no_env_update _ _ env = env in
   let rec transl_store ~scopes rootpath subst cont = function
     [] ->
-      transl_store_subst := subst;
+      DLS.set transl_store_subst subst;
       Lambda.subst no_env_update subst cont
     | item :: rem ->
         match item.str_desc with
@@ -1054,7 +1057,7 @@ let transl_store_structure ~scopes glob map prims aliases str =
                 lambda_unit str.str_items
             in
             (* Careful: see next case *)
-            let subst = !transl_store_subst in
+            let subst = DLS.get transl_store_subst in
             Lsequence(lam,
                       Llet(Strict, Pgenval, id,
                            Lambda.subst no_env_update subst
@@ -1082,7 +1085,7 @@ let transl_store_structure ~scopes glob map prims aliases str =
                 lambda_unit str.str_items
             in
             (* Careful: see next case *)
-            let subst = !transl_store_subst in
+            let subst = DLS.get transl_store_subst in
             let field = field_of_str loc str in
             Lsequence(lam,
                       Llet(Strict, Pgenval, id,
@@ -1158,7 +1161,7 @@ let transl_store_structure ~scopes glob map prims aliases str =
                    in the included structured, but this would introduce
                    a difference of behavior compared to bytecode. *)
             in
-            let subst = !transl_store_subst in
+            let subst = DLS.get transl_store_subst in
             let field = field_of_str (of_location ~scopes loc) str in
             let ids0 = bound_value_identifiers incl_type in
             let rec loop ids args =
@@ -1212,7 +1215,7 @@ let transl_store_structure ~scopes glob map prims aliases str =
                 let loc = of_location ~scopes od.open_loc in
                 let ids = Array.of_list (defined_idents str.str_items) in
                 let ids0 = bound_value_identifiers od.open_bound_items in
-                let subst = !transl_store_subst in
+                let subst = DLS.get transl_store_subst in
                 let rec store_idents pos = function
                   | [] -> transl_store ~scopes rootpath
                             (add_idents true ids0 subst) cont rem
@@ -1306,7 +1309,7 @@ let transl_store_structure ~scopes glob map prims aliases str =
   in
   let aliases = make_sequence store_alias aliases in
   List.fold_right store_primitive prims
-    (transl_store ~scopes (global_path glob) !transl_store_subst aliases str)
+    (transl_store ~scopes (global_path glob) (DLS.get transl_store_subst) aliases str)
 
 (* Transform a coercion and the list of value identifiers defined by
    a toplevel structure into a table [id -> (pos, coercion)],
@@ -1360,7 +1363,7 @@ let build_ident_map restr idlist more_ids =
 
 let transl_store_gen ~scopes module_name ({ str_items = str }, restr) topl =
   reset_labels ();
-  primitive_declarations := [];
+  DLS.set primitive_declarations [];
   Translprim.clear_used_primitives ();
   let module_id = Ident.create_persistent module_name in
   let (map, prims, aliases, size) =
@@ -1368,7 +1371,7 @@ let transl_store_gen ~scopes module_name ({ str_items = str }, restr) topl =
   let f = function
     | [ { str_desc = Tstr_eval (expr, _attrs) } ] when topl ->
         assert (size = 0);
-        Lambda.subst (fun _ _ env -> env) !transl_store_subst
+        Lambda.subst (fun _ _ env -> env) (DLS.get transl_store_subst)
           (transl_exp ~scopes expr)
     | str -> transl_store_structure ~scopes module_id map prims aliases str
   in
@@ -1383,12 +1386,12 @@ let transl_store_phrases module_name str =
   transl_store_gen ~scopes module_name (str,Tcoerce_none) true
 
 let transl_store_implementation module_name (str, restr) =
-  let s = !transl_store_subst in
-  transl_store_subst := Ident.Map.empty;
+  let s = DLS.get transl_store_subst in
+  DLS.set transl_store_subst Ident.Map.empty;
   let module_ident = Ident.create_persistent module_name in
   let scopes = enter_module_definition ~scopes:empty_scopes module_ident in
   let (i, code) = transl_store_gen ~scopes module_name (str, restr) false in
-  transl_store_subst := s;
+  DLS.set transl_store_subst s;
   { Lambda.main_module_block_size = i;
     code;
     (* module_ident is not used by closure, but this allow to share
@@ -1402,14 +1405,14 @@ let toploop_ident = Ident.create_persistent "Toploop"
 let toploop_getvalue_pos = 0 (* position of getvalue in module Toploop *)
 let toploop_setvalue_pos = 1 (* position of setvalue in module Toploop *)
 
-let aliased_idents = ref Ident.empty
+let aliased_idents = Local_store.s_ref Ident.empty
 
 let set_toplevel_unique_name id =
-  aliased_idents :=
-    Ident.add id (Ident.unique_toplevel_name id) !aliased_idents
+  DLS.set aliased_idents
+    (Ident.add id (Ident.unique_toplevel_name id) (DLS.get aliased_idents))
 
 let toplevel_name id =
-  try Ident.find_same id !aliased_idents
+  try Ident.find_same id (DLS.get aliased_idents)
   with Not_found -> Ident.name id
 
 let toploop_getvalue id =
@@ -1719,8 +1722,8 @@ let () =
     )
 
 let reset () =
-  primitive_declarations := [];
-  transl_store_subst := Ident.Map.empty;
-  aliased_idents := Ident.empty;
+  DLS.set primitive_declarations [];
+  DLS.set transl_store_subst Ident.Map.empty;
+  DLS.set aliased_idents Ident.empty;
   Env.reset_required_globals ();
   Translprim.clear_used_primitives ()

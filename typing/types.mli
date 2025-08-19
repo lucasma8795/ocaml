@@ -55,13 +55,20 @@ open Asttypes
 
     Note on mutability: TBD.
  *)
-type type_expr
+
 type row_desc
 type row_field
 type field_kind
 type commutable
 
-type type_desc =
+type transient_expr =
+  { mutable desc: type_desc;
+    mutable level: int;
+    mutable scope: scope_field;
+    id: int }
+and scope_field = int
+and type_expr = transient_expr
+and type_desc =
   | Tvar of string option
   (** [Tvar (Some "a")] ==> ['a] or ['_a]
       [Tvar None]       ==> [_] *)
@@ -250,12 +257,12 @@ val try_mark_node: type_mark -> type_expr -> bool
 
 (** Transient [type_expr].
     Should only be used immediately after [Transient_expr.repr] *)
-type transient_expr = private
+(* type transient_expr = private
       { mutable desc: type_desc;
         mutable level: int;
         mutable scope: scope_field;
         id: int }
-and scope_field (* abstract *)
+and scope_field abstract *)
 
 module Transient_expr : sig
   (** Operations on [transient_expr] *)

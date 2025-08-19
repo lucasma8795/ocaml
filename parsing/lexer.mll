@@ -353,12 +353,12 @@ let update_loc lexbuf file line absolute chars =
     pos_bol = pos.pos_cnum - chars;
   }
 
-let preprocessor = DLS.new_key (fun () -> None)
+let preprocessor = Local_store.s_ref None
 
-let escaped_newlines = DLS.new_key (fun () -> false)
+let escaped_newlines = Local_store.s_ref false
 
-let handle_docstrings = DLS.new_key (fun () -> true)
-let comment_list = DLS.new_key (fun () -> [])
+let handle_docstrings = Local_store.s_ref true
+let comment_list = Local_store.s_ref []
 
 let add_comment com =
   DLS.set comment_list (com :: DLS.get comment_list)

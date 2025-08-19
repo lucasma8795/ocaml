@@ -41,7 +41,7 @@ type docstring =
 
 (* List of docstrings *)
 
-let docstrings : docstring list DLS.key = DLS.new_key (fun () -> [])
+let docstrings = Local_store.s_ref ([] : docstring list)
 
 (* Warn for unused and ambiguous docstrings *)
 

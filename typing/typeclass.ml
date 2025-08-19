@@ -20,6 +20,7 @@ open Types
 open Typecore
 open Typetexp
 
+module DLS = Domain.DLS
 
 type 'a class_info = {
   cls_id : Ident.t;
@@ -1549,13 +1550,14 @@ let class_infos define_class kind
       (* Type the class expression *)
       let (expr, typ) =
         try
-          Typecore.self_coercion :=
-            (Path.Pident obj_id, coercion_locs) :: !Typecore.self_coercion;
+          DLS.set Typecore.self_coercion
+            ((Path.Pident obj_id, coercion_locs) :: DLS.get Typecore.self_coercion);
           let res = kind env cl.pci_virt cl.pci_expr in
-          Typecore.self_coercion := List.tl !Typecore.self_coercion;
+          DLS.set Typecore.self_coercion (List.tl (DLS.get Typecore.self_coercion));
           res
         with exn ->
-          Typecore.self_coercion := []; raise exn
+          DLS.set Typecore.self_coercion [];
+          raise exn
       in
       let sign = Btype.signature_of_class_type typ in
       (ci_params, params, coercion_locs, expr, typ, sign)
@@ -1872,12 +1874,12 @@ let type_classes define_class approx kind env cls =
   let res = List.map (check_coercions env) res in
   (res, env)
 
-let class_num = ref 0
+let class_num = Local_store.s_ref 0
 let class_declaration env virt sexpr =
-  incr class_num;
+  DLS.set class_num (DLS.get class_num + 1);
   let self_scope = Ctype.get_current_level () in
   let expr =
-    class_expr (Int.to_string !class_num) env env virt self_scope sexpr
+    class_expr (Int.to_string (DLS.get class_num)) env env virt self_scope sexpr
   in
   complete_class_type expr.cl_loc env virt Class expr.cl_type;
   (expr, expr.cl_type)
@@ -1921,9 +1923,9 @@ let class_type_declarations env cls =
    env)
 
 let type_object env loc s =
-  incr class_num;
+  DLS.set class_num (DLS.get class_num + 1);
   let desc =
-    class_structure (Int.to_string !class_num)
+    class_structure (Int.to_string (DLS.get class_num))
       Concrete Btype.lowest_level Final env env loc s
   in
   complete_class_signature loc env Concrete Object desc.cstr_type;

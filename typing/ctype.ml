@@ -149,13 +149,13 @@ exception Incompatible
 
 (**** Control tracing of GADT instances *)
 
-let trace_gadt_instances = ref false
+let trace_gadt_instances = Local_store.s_ref false
 let check_trace_gadt_instances ?(force=false) env =
-  not !trace_gadt_instances && (force || Env.has_local_constraints env) &&
-  (trace_gadt_instances := true; cleanup_abbrev (); true)
+  not (DLS.get trace_gadt_instances) && (force || Env.has_local_constraints env) &&
+  (DLS.set trace_gadt_instances true; cleanup_abbrev (); true)
 
 let reset_trace_gadt_instances b =
-  if b then trace_gadt_instances := false
+  if b then DLS.set trace_gadt_instances false
 
 let wrap_trace_gadt_instances ?force env f x =
   let b = check_trace_gadt_instances ?force env in
@@ -165,12 +165,12 @@ let wrap_trace_gadt_instances ?force env f x =
 (**** Abbreviations without parameters ****)
 (* Shall reset after generalizing *)
 
-let simple_abbrevs = ref Mnil
+let simple_abbrevs = s_table ref Mnil
 
 let proper_abbrevs tl abbrev =
-  if tl <> [] || !trace_gadt_instances || !Clflags.principal
+  if tl <> [] || (DLS.get trace_gadt_instances) || !Clflags.principal
   then abbrev
-  else simple_abbrevs
+  else DLS.get simple_abbrevs
 
 (**** Type level management ****)
 
@@ -215,7 +215,7 @@ let with_local_level_gen ~begin_def ~structure ?before_generalize f =
       result
     end
   in
-  simple_abbrevs := Mnil;
+  DLS.get simple_abbrevs := Mnil;
   (* Nodes in [pool] were either created by the above calls to [f]
      and [before_generalize], or they were created before, generalized,
      and then added to the pool by [update_level].
@@ -995,11 +995,11 @@ let rec lower_contravariant env var_level visited contra ty =
   end
 
 let lower_variables_only env level ty =
-  simple_abbrevs := Mnil;
+  DLS.get simple_abbrevs := Mnil;
   lower_contravariant env level (Hashtbl.create 7) true ty
 
 let lower_contravariant env ty =
-  simple_abbrevs := Mnil;
+  DLS.get simple_abbrevs := Mnil;
   lower_contravariant env (DLS.get nongen_level) (Hashtbl.create 7) false ty
 
 let rec generalize_class_type gen =
@@ -1139,7 +1139,7 @@ let rec find_repr p1 =
    scope and performing the necessary book-keeping -- in particular
    reverting the in-place updates after the instantiation is done. *)
 
-let abbreviations = ref (ref Mnil)
+let abbreviations = s_table ref Mnil
   (* Abbreviation memorized. *)
 
 (* partial: we may not wish to copy the non generic types
@@ -1173,7 +1173,7 @@ let rec copy ?partial ?keep_names ?scope copy_scope ty =
     let desc' =
       match desc with
       | Tconstr (p, tl, _) ->
-          let abbrevs = proper_abbrevs tl !abbreviations in
+          let abbrevs = proper_abbrevs tl (DLS.get abbreviations) in
           begin match find_repr p !abbrevs with
             Some ty when not (eq_type ty t) ->
               Tlink ty
@@ -1188,8 +1188,8 @@ let rec copy ?partial ?keep_names ?scope copy_scope ty =
              one reference.
           *)
               Tconstr (p, List.map copy tl,
-                       ref (match !(!abbreviations) with
-                              Mcons _ -> Mlink !abbreviations
+                       ref (match !(DLS.get abbreviations) with
+                              Mcons _ -> Mlink (DLS.get abbreviations)
                             | abbrev  -> abbrev))
           end
       | Tvariant row ->
@@ -1549,9 +1549,9 @@ let subst ~env ~level ?scope ~priv ~abbrev ?oty ~params ~args body =
               fun () -> forget_abbrev abbrev path
           | _ -> assert false
     in
-    abbreviations := abbrev;
+    DLS.set abbreviations abbrev;
     let (params', body') = instance_parameterized_type ?scope params body in
-    abbreviations := ref Mnil;
+    DLS.set abbreviations (ref Mnil);
     let uenv = Expression {env; in_subst = true} in
     try
       !unify_var' uenv body0 body';
@@ -1569,7 +1569,7 @@ let subst ~env ~level ?scope ~priv ~abbrev ?oty ~params ~args body =
    care about efficiency here.
 *)
 let apply ?(use_current_level = false) env params body args =
-  simple_abbrevs := Mnil;
+  DLS.get simple_abbrevs := Mnil;
   let level = if use_current_level then DLS.get current_level else generic_level in
   try
     subst ~env ~level ~priv:Public ~abbrev:(ref Mnil) ~params ~args body
@@ -1586,14 +1586,14 @@ let apply ?(use_current_level = false) env params body args =
    checks whether any of types, modules, or local constraints have
    been changed.
 *)
-let previous_env = ref Env.empty
+let previous_env = Local_store.s_ref Env.empty
 (*let string_of_kind = function Public -> "public" | Private -> "private"*)
 let check_abbrev_env env =
-  if not (Env.same_type_declarations env !previous_env) then begin
+  if not (Env.same_type_declarations env (DLS.get previous_env)) then begin
     (* prerr_endline "cleanup expansion cache"; *)
     cleanup_abbrev ();
-    simple_abbrevs := Mnil;
-    previous_env := env
+    DLS.get simple_abbrevs := Mnil;
+    DLS.set previous_env env
   end
 
 
@@ -1886,21 +1886,21 @@ let rec occur_rec env visited allow_recursive parents ty0 ty =
     ignore (try_mark_node visited ty)
   end
 
-let type_changed = ref false (* trace possible changes to the studied type *)
+let type_changed = Local_store.s_ref false (* trace possible changes to the studied type *)
 
-let merge r b = if b then r := true
+let merge r b = if b then DLS.set r true
 
 let occur uenv ty0 ty =
   let env = get_env uenv in
   let allow_recursive = allow_recursive_equations uenv in
-  let old = !type_changed in
+  let old = DLS.get type_changed in
   try
     while
-      type_changed := false;
+      DLS.set type_changed false;
       if not (eq_type ty0 ty) then
         with_type_mark (fun mark ->
           occur_rec env mark allow_recursive TypeSet.empty ty0 ty);
-      !type_changed
+      DLS.get type_changed
     do () (* prerr_endline "changed" *) done;
     merge type_changed old
   with exn ->
@@ -2122,17 +2122,17 @@ let univars_escape env univar_pairs vl ty =
   occur ty
   end
 
-let univar_pairs = ref []
+let univar_pairs = Local_store.s_ref []
 
 let with_univar_pairs pairs f =
-  let old = !univar_pairs in
-  univar_pairs := pairs;
+  let old = DLS.get univar_pairs in
+  DLS.set univar_pairs pairs;
   Misc.try_finally f
-    ~always:(fun () -> univar_pairs := old)
+    ~always:(fun () -> DLS.set univar_pairs old)
 
 (* Wrapper checking that no variable escapes and updating univar_pairs *)
 let enter_poly env t1 tl1 t2 tl2 f =
-  let old_univars = !univar_pairs in
+  let old_univars = DLS.get univar_pairs in
   let known_univars =
     List.fold_left (fun s (cl,_) -> add_univars s cl)
       TypeSet.empty old_univars
@@ -2434,7 +2434,7 @@ let rec mcomp type_pairs env t1 t2 =
                  t1 tl1 t2 tl2 (mcomp type_pairs env)
              with Escape _ -> raise Incompatible)
         | (Tunivar _, Tunivar _) ->
-            begin try unify_univar t1' t2' !univar_pairs with
+            begin try unify_univar t1' t2' (DLS.get univar_pairs) with
             | Cannot_unify_universal_variables _ -> raise Incompatible
             | Out_of_scope_universal_variable -> ()
             end
@@ -2631,13 +2631,13 @@ let eq_package_path env p1 p2 =
   Path.same (Env.normalize_modtype_path env p1)
             (Env.normalize_modtype_path env p2)
 
-let nondep_type' = ref (fun _ _ _ -> assert false)
-let package_subtype = ref (fun _ _ _ -> assert false)
+let nondep_type' = Local_store.s_ref (fun _ _ _ -> assert false)
+let package_subtype = Local_store.s_ref (fun _ _ _ -> assert false)
 
 exception Nondep_cannot_erase of Ident.t
 
 let nondep_instance env level id ty =
-  let ty = !nondep_type' env [id] ty in
+  let ty = (DLS.get nondep_type') env [id] ty in
   if level = generic_level then duplicate_type ty else
   with_level ~level (fun () -> instance ty)
 
@@ -2694,14 +2694,14 @@ let compare_package env unify_list lv1 pack1 lv2 pack2 =
   unify_list (List.map snd ntl1) (List.map snd ntl2);
   if eq_package_path env pack1.pack_path pack2.pack_path then Ok ()
   else Result.bind
-      (!package_subtype env pack1 pack2)
-      (fun () -> !package_subtype env pack2 pack1)
+      ((DLS.get package_subtype) env pack1 pack2)
+      (fun () -> (DLS.get package_subtype) env pack2 pack1)
 
 (* force unification in Reither when one side has a non-conjunctive type *)
 (* Code smell: this could also be put in unification_environment.
    Only modified by expand_head_rigid, but the corresponding unification
    environment is built in subst. *)
-let rigid_variants = ref false
+let rigid_variants = Local_store.s_ref false
 
 let unify1_var uenv t1 t2 =
   assert (is_Tvar t1);
@@ -2762,7 +2762,7 @@ let rec unify uenv t1 t2 =
   let reset_tracing = check_trace_gadt_instances (get_env uenv) in
 
   try
-    type_changed := true;
+    DLS.set type_changed true;
     begin match (get_desc t1, get_desc t2) with
       (Tvar _, Tconstr _) when deep_occur t1 t2 ->
         unify2 uenv t1 t2
@@ -2773,7 +2773,7 @@ let rec unify uenv t1 t2 =
     | (_, Tvar _) ->
         if unify1_var uenv t2 t1 then () else unify2 uenv t1 t2
     | (Tunivar _, Tunivar _) ->
-        unify_univar_for Unify t1 t2 !univar_pairs;
+        unify_univar_for Unify t1 t2 (DLS.get univar_pairs);
         update_level_for Unify (get_env uenv) (get_level t1) t2;
         update_scope_for Unify (get_scope t1) t2;
         link_type t1 t2
@@ -2860,7 +2860,7 @@ and unify3 uenv t1 t1' t2 t2' =
 
   begin match (d1, d2) with (* handle vars and univars specially *)
     (Tunivar _, Tunivar _) ->
-      unify_univar_for Unify t1' t2' !univar_pairs;
+      unify_univar_for Unify t1' t2' (DLS.get univar_pairs);
       link_type t1' t2'
   | (Tvar _, _) ->
       unify3_var uenv t1' t2 t2'
@@ -3074,7 +3074,7 @@ and unify_fields uenv ty1 ty2 =          (* Optimization *)
       (fun (name, k1, t1, k2, t2) ->
         unify_kind k1 k2;
         try
-          if !trace_gadt_instances && not (in_subst_mode uenv) then begin
+          if DLS.get trace_gadt_instances && not (in_subst_mode uenv) then begin
             (* in_subst_mode: see PR#11771 *)
             update_level_for Unify (get_env uenv) (get_level va) t1;
             update_scope_for Unify (get_scope va) t1
@@ -3167,7 +3167,7 @@ and unify_row uenv row1 row2 =
     (* The following test is not principal... should rather use Tnil *)
     let rm = row_more row in
     (*if !trace_gadt_instances && rm.desc = Tnil then () else*)
-    if !trace_gadt_instances && not (in_subst_mode uenv) then
+    if DLS.get trace_gadt_instances && not (in_subst_mode uenv) then
       (* in_subst_mode: see PR#11771 *)
       update_level_for Unify (get_env uenv) (get_level rm)
         (newgenty (Tvariant row));
@@ -3232,7 +3232,7 @@ and unify_row_field uenv fixed1 fixed2 rm1 rm2 l f1 f2 =
       end
       else let redo =
         (m1 || m2 || either_fixed ||
-         !rigid_variants && (List.length tl1 = 1 || List.length tl2 = 1)) &&
+         (DLS.get rigid_variants) && (List.length tl1 = 1 || List.length tl2 = 1)) &&
         begin match tl1 @ tl2 with [] -> false
         | t1 :: tl ->
             if no_arg then raise_unexplained_for Unify;
@@ -3876,7 +3876,7 @@ let rec moregen type_pairs env t1 t2 =
               enter_poly_for Moregen env t1 tl1 t2 tl2
                 (moregen type_pairs env)
           | (Tunivar _, Tunivar _) ->
-              unify_univar_for Moregen t1' t2' !univar_pairs
+              unify_univar_for Moregen t1' t2' (DLS.get univar_pairs)
           | (_, _) ->
               raise_unexplained_for Moregen
         end
@@ -3963,7 +3963,7 @@ and moregen_row type_pairs env row1 row2 =
   let md1 = get_desc rm1 (* This lets us undo a following [link_type] *) in
   begin match md1, get_desc rm2 with
     Tunivar _, Tunivar _ ->
-      unify_univar_for Moregen rm1 rm2 !univar_pairs
+      unify_univar_for Moregen rm1 rm2 (DLS.get univar_pairs)
   | Tunivar _, _ | _, Tunivar _ ->
       raise_unexplained_for Moregen
   | _ when static_row row1 -> ()
@@ -4175,10 +4175,10 @@ let does_match env ty ty' =
                  (*********************************************)
 
 let expand_head_rigid env ty =
-  let old = !rigid_variants in
-  rigid_variants := true;
+  let old = DLS.get rigid_variants in
+  DLS.set rigid_variants true;
   let ty' = expand_head env ty in
-  rigid_variants := old; ty'
+  DLS.set rigid_variants old; ty'
 
 let eqtype_subst type_pairs subst t1 t2 =
   if List.exists
@@ -4254,7 +4254,7 @@ let rec eqtype rename type_pairs subst env t1 t2 =
               enter_poly_for Equality env t1 tl1 t2 tl2
                 (eqtype rename type_pairs subst env)
           | (Tunivar _, Tunivar _) ->
-              unify_univar_for Equality t1' t2' !univar_pairs
+              unify_univar_for Equality t1' t2' (DLS.get univar_pairs)
           | (_, _) ->
               raise_unexplained_for Equality
         end
@@ -4733,7 +4733,7 @@ let match_class_declarations env patt_params patt_type subj_params subj_type =
    [posi] true if the current variance is positive
    [level] number of expansions/enlargement allowed on this branch *)
 
-let warn = ref false  (* whether double coercion might do better *)
+let warn = Local_store.s_ref false  (* whether double coercion might do better *)
 let pred_expand n = if n mod 2 = 0 && n > 0 then pred n else n
 let pred_enlarge n = if n mod 2 = 1 then pred n else n
 
@@ -4752,7 +4752,7 @@ let rec filter_visited = function
   | _ :: l -> filter_visited l
 
 let memq_warn t visited =
-  if List.memq t visited then (warn := true; true) else false
+  if List.memq t visited then (DLS.set warn true; true) else false
 
 let find_cltype_for_path env p =
   let cl_abbr = Env.find_hash_type p env in
@@ -4774,7 +4774,7 @@ let rec build_subtype env (visited : transient_expr list)
       if posi then
         try
           let t' = List.assq (get_id t) loops in
-          warn := true;
+          DLS.set warn true;
           (t', Equiv)
         with Not_found ->
           (t, Unchanged)
@@ -4855,7 +4855,7 @@ let rec build_subtype env (visited : transient_expr list)
         let decl = Env.find_type p env in
         if level = 0 && generic_abbrev env p && safe_abbrev env t
         && not (has_constr_row' env t)
-        then warn := true;
+        then DLS.set warn true;
         let tl' =
           List.map2
             (fun v t ->
@@ -4926,7 +4926,7 @@ let rec build_subtype env (visited : transient_expr list)
         let v = newvar () in
         (v, Changed)
       else begin
-        warn := true;
+        DLS.set warn true;
         (t, Unchanged)
       end
   | Tsubst _ | Tlink _ ->
@@ -4939,10 +4939,10 @@ let rec build_subtype env (visited : transient_expr list)
       (t, Unchanged)
 
 let enlarge_type env ty =
-  warn := false;
+  DLS.set warn false;
   (* [level = 4] allows 2 expansions involving objects/variants *)
   let (ty', _) = build_subtype env [] [] true 4 ty in
-  (ty', !warn)
+  (ty', DLS.get warn)
 
 (**** Check whether a type is a subtype of another type. ****)
 
@@ -4960,7 +4960,7 @@ let enlarge_type env ty =
     [generic_abbrev ...]).
 *)
 
-let subtypes = TypePairs.create 17
+let subtypes = Local_store.s_table TypePairs.create 17
 
 let subtype_error ~env ~trace ~unification_trace =
   raise (Subtype (Subtype.error
@@ -4970,13 +4970,13 @@ let subtype_error ~env ~trace ~unification_trace =
 let rec subtype_rec env trace t1 t2 cstrs =
   if eq_type t1 t2 then cstrs else
 
-  if TypePairs.mem subtypes (t1, t2) then
+  if TypePairs.mem (DLS.get subtypes) (t1, t2) then
     cstrs
   else begin
-    TypePairs.add subtypes (t1, t2);
+    TypePairs.add (DLS.get subtypes) (t1, t2);
     match (get_desc t1, get_desc t2) with
       (Tvar _, _) | (_, Tvar _) ->
-        (trace, t1, t2, !univar_pairs)::cstrs
+        (trace, t1, t2, DLS.get univar_pairs)::cstrs
     | (Tarrow(l1, t1, u1, _), Tarrow(l2, t2, u2, _))
       when compatible_labels ~in_pattern_mode:false l1 l2 ->
         let cstrs =
@@ -5011,7 +5011,7 @@ let rec subtype_rec env trace t1 t2 cstrs =
                 if cn then
                   (trace, newty2 ~level:(get_level t1) (Ttuple[None, t1]),
                    newty2 ~level:(get_level t2) (Ttuple[None, t2]),
-                   !univar_pairs)
+                   DLS.get univar_pairs)
                   :: cstrs
                 else
                   subtype_rec
@@ -5030,7 +5030,7 @@ let rec subtype_rec env trace t1 t2 cstrs =
                 else cstrs)
             cstrs decl.type_variance (List.combine tl1 tl2)
         with Not_found ->
-          (trace, t1, t2, !univar_pairs)::cstrs
+          (trace, t1, t2, DLS.get univar_pairs)::cstrs
         end
     | (Tconstr(p1, _, _), _)
       when generic_private_abbrev env p1 && safe_abbrev_opt env t1 ->
@@ -5040,14 +5040,14 @@ let rec subtype_rec env trace t1 t2 cstrs =
     | (Tobject (f1, _), Tobject (f2, _))
       when is_Tvar (object_row f1) && is_Tvar (object_row f2) ->
         (* Same row variable implies same object. *)
-        (trace, t1, t2, !univar_pairs)::cstrs
+        (trace, t1, t2, DLS.get univar_pairs)::cstrs
     | (Tobject (f1, _), Tobject (f2, _)) ->
         subtype_fields env trace f1 f2 cstrs
     | (Tvariant row1, Tvariant row2) ->
         begin try
           subtype_row env trace row1 row2 cstrs
         with Exit ->
-          (trace, t1, t2, !univar_pairs)::cstrs
+          (trace, t1, t2, DLS.get univar_pairs)::cstrs
         end
     | (Tpoly (u1, []), Tpoly (u2, [])) ->
         subtype_rec env trace u1 u2 cstrs
@@ -5059,13 +5059,13 @@ let rec subtype_rec env trace t1 t2 cstrs =
           enter_poly env u1 tl1 u2 tl2
             (fun t1 t2 -> subtype_rec env trace t1 t2 cstrs)
         with Escape _ ->
-          (trace, t1, t2, !univar_pairs)::cstrs
+          (trace, t1, t2, DLS.get univar_pairs)::cstrs
         end
     | (Tpackage pack1, Tpackage pack2) ->
         subtype_package env trace (get_level t1) pack1
           (get_level t2) pack2 cstrs
     | (_, _) ->
-        (trace, t1, t2, !univar_pairs)::cstrs
+        (trace, t1, t2, DLS.get univar_pairs)::cstrs
   end
 
 and subtype_labeled_list env trace labeled_tl1 labeled_tl2 cstrs =
@@ -5090,7 +5090,7 @@ and subtype_package env trace lvl1 pack1 lvl2 pack2 cstrs =
         ~allow_absent:true in
     let cstrs' =
       List.map
-        (fun (n2,t2) -> (trace, List.assoc n2 ntl1, t2, !univar_pairs))
+        (fun (n2,t2) -> (trace, List.assoc n2 ntl1, t2, DLS.get univar_pairs))
         ntl2
     in
     if eq_package_path env pack1.pack_path pack2.pack_path then cstrs' @ cstrs
@@ -5098,13 +5098,13 @@ and subtype_package env trace lvl1 pack1 lvl2 pack2 cstrs =
       (* need to check module subtyping *)
       let snap = Btype.snapshot () in
       match List.iter (fun (_, t1, t2, _) -> unify env t1 t2) cstrs' with
-      | () when Result.is_ok (!package_subtype env pack1 pack2) ->
+      | () when Result.is_ok ((DLS.get package_subtype) env pack1 pack2) ->
         Btype.backtrack snap; cstrs' @ cstrs
       | () | exception Unify _ ->
         Btype.backtrack snap; raise Not_found
     end
   with Not_found ->
-    (trace, newty (Tpackage pack1), newty (Tpackage pack2), !univar_pairs)
+    (trace, newty (Tpackage pack1), newty (Tpackage pack2), DLS.get univar_pairs)
       ::cstrs
 
 and subtype_fields env trace ty1 ty2 cstrs =
@@ -5122,12 +5122,12 @@ and subtype_fields env trace ty1 ty2 cstrs =
         cstrs
     else
       (trace, build_fields (get_level ty1) miss1 rest1, rest2,
-       !univar_pairs) :: cstrs
+       DLS.get univar_pairs) :: cstrs
   in
   let cstrs =
     if miss2 = [] then cstrs else
     (trace, rest1, build_fields (get_level ty2) miss2 (newvar ()),
-     !univar_pairs) :: cstrs
+     DLS.get univar_pairs) :: cstrs
   in
   List.fold_left
     (fun cstrs (_, _k1, t1, _k2, t2) ->
@@ -5211,13 +5211,13 @@ and subtype_row env trace row1 row2 cstrs =
       raise Exit
 
 let subtype env ty1 ty2 =
-  TypePairs.clear subtypes;
+  TypePairs.clear (DLS.get subtypes);
   with_univar_pairs [] (fun () ->
     (* Build constraint set. *)
     let cstrs =
       subtype_rec env [Subtype.Diff {got = ty1; expected = ty2}] ty1 ty2 []
     in
-    TypePairs.clear subtypes;
+    TypePairs.clear (DLS.get subtypes);
     (* Enforce constraints. *)
     function () ->
       List.iter
@@ -5456,10 +5456,11 @@ let normalize_type ty =
    expand_abbrev.
 *)
 
-let nondep_hash     = TypeHash.create 47
-let nondep_variants = TypeHash.create 17
+let nondep_hash     = Local_store.s_table TypeHash.create 47
+let nondep_variants = Local_store.s_table TypeHash.create 17
 let clear_hash ()   =
-  TypeHash.clear nondep_hash; TypeHash.clear nondep_variants
+  TypeHash.clear (DLS.get nondep_hash);
+  TypeHash.clear (DLS.get nondep_variants)
 
 let rec nondep_type_rec ?(expand_private=false) env ids ty =
   let try_expand env t =
@@ -5468,10 +5469,10 @@ let rec nondep_type_rec ?(expand_private=false) env ids ty =
   in
   match get_desc ty with
     Tvar _ | Tunivar _ -> ty
-  | _ -> try TypeHash.find nondep_hash ty
+  | _ -> try TypeHash.find (DLS.get nondep_hash) ty
   with Not_found ->
     let ty' = newgenstub ~scope:(get_scope ty) in
-    TypeHash.add nondep_hash ty ty';
+    TypeHash.add (DLS.get nondep_hash) ty ty';
     match
       match get_desc ty with
       | Tconstr(p, tl, _abbrev) as desc ->
@@ -5516,13 +5517,13 @@ let rec nondep_type_rec ?(expand_private=false) env ids ty =
           let more = row_more row in
           (* We must keep sharing according to the row variable *)
           begin try
-            let ty2 = TypeHash.find nondep_variants more in
+            let ty2 = TypeHash.find (DLS.get nondep_variants) more in
             (* This variant type has been already copied *)
-            TypeHash.add nondep_hash ty ty2;
+            TypeHash.add (DLS.get nondep_hash) ty ty2;
             Tlink ty2
           with Not_found ->
             (* Register new type first for recursion *)
-            TypeHash.add nondep_variants more ty';
+            TypeHash.add (DLS.get nondep_variants) more ty';
             let static = static_row row in
             let more' =
               if static then newgenty Tnil else nondep_type_rec env ids more
@@ -5541,7 +5542,7 @@ let rec nondep_type_rec ?(expand_private=false) env ids ty =
       Transient_expr.set_stub_desc ty' desc;
       ty'
     | exception e ->
-      TypeHash.remove nondep_hash ty;
+      TypeHash.remove (DLS.get nondep_hash) ty;
       raise e
 
 let nondep_type env id ty =
@@ -5553,7 +5554,7 @@ let nondep_type env id ty =
     clear_hash ();
     raise exn
 
-let () = nondep_type' := nondep_type
+let () = DLS.set nondep_type' nondep_type
 
 (* Preserve sharing inside type declarations. *)
 let nondep_type_decl env mid is_covariant decl =

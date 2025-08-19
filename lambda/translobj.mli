@@ -25,7 +25,7 @@ val transl_label_init: (unit -> lambda) -> lambda
 val transl_store_label_init:
     Ident.t -> int -> ('a -> lambda) -> 'a -> int * lambda
 
-val method_ids: Ident.Set.t ref (* reset when starting a new wrapper *)
+val method_ids: Ident.Set.t Domain.DLS.key (* reset when starting a new wrapper *)
 
 val oo_wrap: Env.t -> bool -> ('a -> lambda) -> 'a -> lambda
 val oo_wrap_gen: Env.t -> bool -> ('a -> lambda * 'b) -> 'a -> lambda * 'b

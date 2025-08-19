@@ -191,6 +191,8 @@ open Translobj
 open Translcore
 open Debuginfo.Scoped_location
 
+module DLS = Domain.DLS
+
 (* XXX Rajouter des evenements... | Add more events... *)
 
 type error = Tags of label * label
@@ -1011,11 +1013,11 @@ let transl_class ~scopes ids cl_id pub_meths cl vflag =
        in the typing environment (PR#3576, PR#4560) *)
     (* very hacky: we add and remove free method ids on the fly,
        depending on the visit order... *)
-    method_ids :=
-      Ident.Set.diff (Ident.Set.union (free_methods lam) !method_ids) meth_ids;
+    DLS.set method_ids
+      (Ident.Set.diff (Ident.Set.union (free_methods lam) (DLS.get method_ids)) meth_ids);
     (* prerr_ids "meth_ids =" (Ident.Set.elements meth_ids);
        prerr_ids "method_ids =" (Ident.Set.elements !method_ids); *)
-    let new_ids = List.fold_right Ident.Set.add new_ids !method_ids in
+    let new_ids = List.fold_right Ident.Set.add new_ids (DLS.get method_ids) in
     let fv = Ident.Set.inter fv new_ids in
     new_ids' := !new_ids' @ Ident.Set.elements fv;
     (* prerr_ids "new_ids' =" !new_ids'; *)
