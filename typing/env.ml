@@ -1491,13 +1491,13 @@ let rec is_aliasable path env =
 (* Copying types associated with values *)
 
 let make_copy_of_types env0 =
-  let memo = Hashtbl.create 16 in
+  let memo = s_table Hashtbl.create 16 in
   let copy t =
     try
-      Hashtbl.find memo (get_id t)
+      Hashtbl.find (DLS.get memo) (get_id t)
     with Not_found ->
       let t2 = Subst.type_expr Subst.identity t in
-      Hashtbl.add memo (get_id t) t2;
+      Hashtbl.add (DLS.get memo) (get_id t) t2;
       t2
   in
   let f = function

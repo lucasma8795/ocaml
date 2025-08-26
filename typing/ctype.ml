@@ -2631,13 +2631,13 @@ let eq_package_path env p1 p2 =
   Path.same (Env.normalize_modtype_path env p1)
             (Env.normalize_modtype_path env p2)
 
-let nondep_type' = Local_store.s_ref (fun _ _ _ -> assert false)
-let package_subtype = Local_store.s_ref (fun _ _ _ -> assert false)
+let nondep_type' = ref (fun _ _ _ -> assert false)
+let package_subtype = ref (fun _ _ _ -> assert false)
 
 exception Nondep_cannot_erase of Ident.t
 
 let nondep_instance env level id ty =
-  let ty = (DLS.get nondep_type') env [id] ty in
+  let ty = !nondep_type' env [id] ty in
   if level = generic_level then duplicate_type ty else
   with_level ~level (fun () -> instance ty)
 
@@ -2694,8 +2694,8 @@ let compare_package env unify_list lv1 pack1 lv2 pack2 =
   unify_list (List.map snd ntl1) (List.map snd ntl2);
   if eq_package_path env pack1.pack_path pack2.pack_path then Ok ()
   else Result.bind
-      ((DLS.get package_subtype) env pack1 pack2)
-      (fun () -> (DLS.get package_subtype) env pack2 pack1)
+      (!package_subtype env pack1 pack2)
+      (fun () -> !package_subtype env pack2 pack1)
 
 (* force unification in Reither when one side has a non-conjunctive type *)
 (* Code smell: this could also be put in unification_environment.
@@ -5098,7 +5098,7 @@ and subtype_package env trace lvl1 pack1 lvl2 pack2 cstrs =
       (* need to check module subtyping *)
       let snap = Btype.snapshot () in
       match List.iter (fun (_, t1, t2, _) -> unify env t1 t2) cstrs' with
-      | () when Result.is_ok ((DLS.get package_subtype) env pack1 pack2) ->
+      | () when Result.is_ok (!package_subtype env pack1 pack2) ->
         Btype.backtrack snap; cstrs' @ cstrs
       | () | exception Unify _ ->
         Btype.backtrack snap; raise Not_found
@@ -5554,7 +5554,7 @@ let nondep_type env id ty =
     clear_hash ();
     raise exn
 
-let () = DLS.set nondep_type' nondep_type
+let () = nondep_type' := nondep_type
 
 (* Preserve sharing inside type declarations. *)
 let nondep_type_decl env mid is_covariant decl =

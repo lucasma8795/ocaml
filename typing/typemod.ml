@@ -2301,7 +2301,7 @@ let package_subtype env pack1 pack2 =
         let msg = doc_printf "%a" Includemod_errorprinter.err_msgs e in
         Result.Error (Errortrace.Package_inclusion msg)
 
-let () = DLS.set Ctype.package_subtype package_subtype
+let () = Ctype.package_subtype := package_subtype
 
 let wrap_constraint_package env mark arg mty explicit =
   let mty1 = Subst.modtype Keep Subst.identity arg.mod_type in
@@ -2755,19 +2755,12 @@ and type_structure ?(toplevel = false) ~funct_body anchor env sstr =
     str, sg, names, Shape.str shape_map, final_env
   in
 
-  let run =
+  (* let run =
     let m = Mutex.create () in
     let locked = ref false in
     let lock () = Mutex.lock m; locked := true in
     let unlock () = if !locked then Mutex.unlock m; locked := false in
     fun () -> begin
-      (* let _ = Sys.command "ps | pgrep ocamlrun > pid" in
-      let chan = open_in "pid" in
-      begin match int_of_string (input_line chan) with
-        | pid -> Printf.eprintf "entering run () with pid %d, locking\n%!" pid
-        | exception _ -> Printf.eprintf "entering run () (pid unknown?), locking\n%!"
-      end;
-      close_in chan; *)
       lock ();
       let ret = begin match run () with
       | ret -> unlock (); ret
@@ -2783,8 +2776,7 @@ and type_structure ?(toplevel = false) ~funct_body anchor env sstr =
         Effect.Deep.continue k ret
       end in
       ret
-    end
-  in
+    end *)
   if toplevel then run ()
   else Builtin_attributes.warning_scope [] run
 
@@ -3311,6 +3303,45 @@ let gen_annot target annots =
     ~use_summaries:false
     annots
 
+(* let restrict =
+  let count = DLS.new_key (fun () -> 0) in
+  let running_domain = ref None in
+  let last_running_domain = ref None in
+  let lock = Mutex.create () in
+  fun f -> begin
+    Printf.eprintf "entering %d\n%!" (DLS.get count);
+    if DLS.get count = 0 then begin
+      let last_was_us () =
+        match !last_running_domain with
+        | None -> false
+        | Some d -> if ((d : Domain.id) :> int) = 0 then false else d = Domain.self ()
+      in
+      while Mutex.lock lock; !running_domain <> None || last_was_us () do
+        Mutex.unlock lock;
+      done;
+      running_domain := Some (Domain.self ());
+      Mutex.unlock lock;
+    end;
+
+    assert (Option.get !running_domain = Domain.self ());
+
+    DLS.set count (DLS.get count + 1);
+    let ret = f () in
+    DLS.set count (DLS.get count - 1);
+
+    if DLS.get count = 0 then begin
+      Mutex.lock lock;
+      last_running_domain := !running_domain;
+      running_domain := None;
+      Mutex.unlock lock;
+      Printf.eprintf "done!\n%!";
+      Sys.command "sleep 0.5" |> ignore
+    end;
+
+    Printf.eprintf "exiting %d\n%!" (DLS.get count);
+    ret
+  end *)
+
 let type_implementation target initial_env ast =
   let sourcefile = Unit_info.source_file target in
   let save_cmt target annots initial_env cmi shape =
@@ -3325,7 +3356,8 @@ let type_implementation target initial_env ast =
       if !Clflags.print_types then (* #7656 *)
         ignore @@ Warnings.parse_options false "-32-34-37-38-60";
       let (str, sg, names, shape, finalenv) =
-        type_structure initial_env ast in
+        type_structure initial_env ast
+      in
       let shape =
         let id = Ident.create_persistent @@ Unit_info.modname target in
         Shape.set_uid_if_none shape (Uid.of_compilation_unit_id id)
@@ -3414,6 +3446,9 @@ let type_implementation target initial_env ast =
         in
         save_cmt target annots initial_env None None
       )
+
+(* let type_implementation target initial_env ast =
+  restrict (fun () -> type_implementation target initial_env ast) *)
 
 let save_signature target tsg initial_env cmi =
   Cmt_format.save_cmt (Unit_info.cmti target)

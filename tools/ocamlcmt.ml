@@ -217,4 +217,4 @@ let main () =
     Format.fprintf Format.err_formatter "@.";
     exit 2
 
-let _ = main ()
+let _ = Handler_common.handle main
