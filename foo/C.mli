@@ -1,3 +1,1 @@
-open D
-
-val baz : int list
+val baz : D.number list

@@ -84,8 +84,8 @@ let try_resolve p =
 module Pool = struct
   type pool_data = {
     domains : unit Domain.t array;
-    task_queue : task TSQueue.t;
-    suspended_tasks : ((unit, unit) continuation * unit promise) list ref;
+    task_queue : (task * Domain.id option) TSQueue.t;
+    suspended_tasks : ((unit, unit) continuation * unit promise * Domain.id) list ref;
     suspended_tasks_mutex : Mutex.t;
     active_tasks : int Atomic.t;
   }
@@ -99,13 +99,13 @@ module Pool = struct
     | Some p -> begin
       (* check if suspended tasks can be resumed *)
       Mutex.lock p.suspended_tasks_mutex;
-      let pred = fun (_, promise) -> Atomic.get promise <> Pending in
+      let pred = fun (_, promise, _) -> Atomic.get promise <> Pending in
       let (resumable_tasks, blocked_tasks) =
         List.partition pred !(p.suspended_tasks)
       in
 
       (* resume suspended tasks *)
-      List.iter (fun (fiber, promise) ->
+      List.iter (fun (fiber, promise, id) ->
         let task =
           match Atomic.get promise with
           | Resolved v -> fun () -> continue fiber v
@@ -115,7 +115,7 @@ module Pool = struct
               discontinue fiber exn
           | Pending -> failwith "impossible" (* should have been filtered out *)
         in
-        TSQueue.add task p.task_queue
+        TSQueue.add (task, Some id) p.task_queue
       ) resumable_tasks;
 
       (* update the suspended tasks list *)
@@ -123,26 +123,45 @@ module Pool = struct
       Mutex.unlock p.suspended_tasks_mutex;
 
       (* wait for a new task or shutdown signal *)
-      let task = TSQueue.take p.task_queue in
-      try_with task ()
-      {
-        effc = (fun (type c) (eff: c Effect.t) ->
-          match eff with
-          | Suspend_task promise ->
-            Some (fun (k: (c, _) continuation) ->
-              (* store in suspended tasks list *)
-              Mutex.lock p.suspended_tasks_mutex;
-              p.suspended_tasks := (k, promise) :: !(p.suspended_tasks);
-              Mutex.unlock p.suspended_tasks_mutex
+      let task, id = TSQueue.take p.task_queue in
+      begin match id with
+        | None ->
+          try_with task ()
+          {
+            effc = (fun (type c) (eff: c Effect.t) ->
+              match eff with
+              | Suspend_task promise ->
+                Some (fun (k: (c, _) continuation) ->
+                  (* store in suspended tasks list *)
+                  Mutex.lock p.suspended_tasks_mutex;
+                  p.suspended_tasks := (k, promise, Domain.self ()) :: !(p.suspended_tasks);
+                  Mutex.unlock p.suspended_tasks_mutex
+                )
+              | _ -> None
             )
-          | _ -> None
-        )
-      };
+          }
+        | Some id when id = Domain.self () ->
+          try_with task ()
+          {
+            effc = (fun (type c) (eff: c Effect.t) ->
+              match eff with
+              | Suspend_task promise ->
+                Some (fun (k: (c, _) continuation) ->
+                  (* store in suspended tasks list *)
+                  Mutex.lock p.suspended_tasks_mutex;
+                  p.suspended_tasks := (k, promise, id) :: !(p.suspended_tasks);
+                  Mutex.unlock p.suspended_tasks_mutex
+                )
+              | _ -> None
+            )
+          }
+        | _ -> TSQueue.add (task, id) p.task_queue;
+      end;
       worker pool
     end
 
   (* decorates a task with ability to update state after finishing *)
-  let create num_domains =
+  let create ?(init = fun () -> ()) num_domains =
     if num_domains <= 0 then
       raise (Invalid_argument "number of domains must be positive");
 
@@ -155,7 +174,7 @@ module Pool = struct
     }) in
 
     (* now create the domains *)
-    let make_new_domain = fun _ -> Domain.spawn (fun () -> worker pool) in
+    let make_new_domain = fun _ -> Domain.spawn (fun () -> (init (); worker pool)) in
     let domains = Array.init num_domains make_new_domain in
 
     (* update the pool with the actual domains *)
@@ -182,7 +201,7 @@ module Pool = struct
             Atomic.set promise (Rejected exn);
             Atomic.decr p.active_tasks
         in
-        TSQueue.add wrapped_task p.task_queue;
+        TSQueue.add (wrapped_task, None) p.task_queue;
       end;
     promise
 
@@ -199,7 +218,7 @@ module Pool = struct
 
       (* temporary hack: wake up blocked workers *)
       for _ = 1 to Array.length p.domains do
-        TSQueue.add (fun () -> ()) p.task_queue
+        TSQueue.add ((fun () -> ()), None) p.task_queue
       done;
       Array.iter Domain.join p.domains;
 end

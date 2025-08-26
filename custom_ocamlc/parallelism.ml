@@ -11,7 +11,7 @@ module Dir = Load_path.Dir
 
 let pending_compilation : (filename, unit promise) Hashtbl.t =
   Hashtbl.create 16
-let pool = Pool.create 1
+let pool = Pool.create 2
 
 let resolve_source_fullname cmi_file ~normalize =
   assert (Filename.check_suffix cmi_file ".cmi");
@@ -30,8 +30,16 @@ let rec handle (compile : Compenv.action_context -> filename -> unit)
   (ctx : Compenv.action_context) (store : Local_store.store)
   (fullname : filename)
 =
+  let f () =
+    (* begin if Filename.check_suffix fullname ".ml" then
+      let prefix = Filename.chop_suffix fullname ".ml" in
+      let cmi_file = prefix ^ ".cmi" in
+      Effect.perform (Load_path.Find_path cmi_file) |> ignore
+    end; *)
+    compile ctx fullname
+  in
   let override () =
-    match compile ctx fullname with
+    match f () with
     | () -> ()
 
     | effect (Load_path.Find_path dep), k ->
@@ -125,6 +133,7 @@ compile_dependency (ctx : Compenv.action_context)
 
 let compile_ml_files ctx ml_files =
   Compmisc.init_path ();
+  Local_store.freeze ();
 
   let promises = List.map (fun ml_file ->
     (* resolve source fullname *)
@@ -135,8 +144,8 @@ let compile_ml_files ctx ml_files =
       handle compile_implementation ctx store ml_fullname;
 
       (* update the load path with the new .cmo file *)
-      let cmo_fullname = (Filename.chop_suffix ml_fullname ".ml") ^ ".cmo" in
-      add_new_file_to_path cmo_fullname;
+      (* let cmo_fullname = (Filename.chop_suffix ml_fullname ".ml") ^ ".cmo" in *)
+      (* add_new_file_to_path cmo_fullname; *)
       Local_store.close_store store)
   ) ml_files
 

@@ -15,3 +15,7 @@ rm -rf foo/*.cm{i,o,ti}
   -I custom_ocamlc -I +compiler-libs -g -o custom-ocamlc
 
 OCAMLRUNPARAM=b ./custom-ocamlc -g -c foo/A.ml foo/B.ml foo/C.ml foo/D.ml -I stdlib -I foo &> out
+
+../v1/bin/ocamlc foo/D.cmo foo/B.cmo foo/C.cmo foo/A.cmo -o foo/prog
+
+../v1/bin/ocamlrun foo/prog

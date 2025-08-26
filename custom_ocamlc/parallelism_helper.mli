@@ -56,8 +56,9 @@ module Pool : sig
   type t
   (** Type of a thread pool. *)
 
-  val create : int -> t
-  (** [create n] creates a thread pool with [n] new domains.
+  val create : ?init:(unit -> unit) -> int -> t
+  (** [create ?init n] creates a thread pool with [n] new domains, executing
+      [~init ()] once per domain on startup.
       Raises {!Invalid_argument} if [n] is not positive. *)
 
   val submit : t -> (unit -> 'a) -> 'a promise

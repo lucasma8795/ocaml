@@ -1,6 +1,8 @@
 type t
 
-val qux : t -> int
+type number = int
+
+val qux : t -> number
 
 val zero  : t
 val one   : t
