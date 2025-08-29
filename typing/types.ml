@@ -98,6 +98,35 @@ module TransientTypeOps = struct
   let equal t1 t2 = t1 == t2
 end
 
+let rec pp_path (p : Path.t) =
+  match p with
+  | Pident id -> Ident.to_string id
+  | Pdot(p, s) | Pextra_ty (p, Pcstr_ty s) ->
+      Printf.sprintf "%s.%s" (pp_path p) s
+  | Papply(p1, p2) -> Printf.sprintf "%s(%s)" (pp_path p1) (pp_path p2)
+  | Pextra_ty (p, Pext_ty) -> pp_path p
+
+let rec pp_type_desc = function
+  | Tvar None -> "Tvar None"
+  | Tvar (Some id) -> Printf.sprintf "Tvar (%s)" id
+  | Tarrow (_, from, _to, _) ->
+    Printf.sprintf "Tarrow (_, %s, %s, _)" (pp_type_desc from.desc) (pp_type_desc _to.desc)
+  | Ttuple _ -> "Ttuple _"
+  | Tconstr (path, args, _) ->
+    let args = List.map (fun arg -> pp_type_desc arg.desc) args in
+    Printf.sprintf "Tconstr (%s, [%s], _)" (pp_path path) (String.concat ", " args)
+  | Tobject _ -> "Tobject _"
+  | Tfield _ -> "Tfield _"
+  | Tnil -> "Tnil"
+  | Tlink expr -> Printf.sprintf "Tlink (%s)" (pp_type_desc expr.desc)
+  | Tsubst _ -> "Tsubst _"
+  (* | Tsubst (expr, _) -> Printf.sprintf "Tsubst (%s, _)" (pp_type_desc expr.desc) *)
+  | Tvariant _ -> "Tvariant _"
+  | Tunivar _ -> "Tunivar _"
+  | Tpoly _ -> "Tpoly _"
+  | Tpackage _ -> "Tpackage _"
+
+
 module TransientTypeHash = Hashtbl.Make(TransientTypeOps)
 
 (* *)
@@ -520,6 +549,7 @@ let rec repr_link (t : type_expr) d : type_expr -> type_expr =
      repr_link t d' t'
  | t' ->
      log_change (Ccompress (t, t.desc, d));
+     Dbg.dbg "repr_link: %s to %s\n" (pp_type_desc t.desc) (pp_type_desc d);
      t.desc <- d;
      t'
 
@@ -586,8 +616,13 @@ let not_marked_node mark t =
 
 module Transient_expr = struct
   let create desc ~level ~scope ~id = {desc; level; scope; id}
-  let set_desc ty d = ty.desc <- d
-  let set_stub_desc ty d = assert (ty.desc = Tvar None); ty.desc <- d
+  let set_desc ty d =
+    Dbg.dbg "set_desc: %s to %s\n" (pp_type_desc ty.desc) (pp_type_desc d);
+    ty.desc <- d
+  let set_stub_desc ty d =
+    assert (ty.desc = Tvar None);
+    Dbg.dbg "set_stub_desc: Tvar None to %s\n" (pp_type_desc d);
+    ty.desc <- d
   let set_level ty lv = ty.level <- lv
   let get_scope ty = ty.scope land scope_mask
   let get_marks ty = ty.scope lsr 27

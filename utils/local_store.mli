@@ -47,16 +47,9 @@ type store
 
 val freeze : unit -> unit
 
-val fresh : string -> store
-(** Returns a fresh instance of the store.
+val snapshot : string -> store
 
-    The first time this function is called, it snapshots the value of all the
-    registered references, later calls to [fresh] will return instances
-    initialized to those values. *)
-
-val open_store : store -> unit
-
-val close_store : store -> unit
+val restore : store -> unit
 
 val reset : unit -> unit
 (** Resets all the references to the initial snapshot (i.e. to the same values

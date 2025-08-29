@@ -62,3 +62,5 @@ use \"Parse.longident\" or \"Longident.unflatten\""]
    input-location support.
 
 *)
+
+val to_string: t -> string

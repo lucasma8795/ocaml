@@ -19,6 +19,11 @@ type t =
   | Ldot of t loc * string loc
   | Lapply of t loc * t loc
 
+let rec to_string = function
+  | Lident s -> s
+  | Ldot(lid, s) -> Printf.sprintf "%s.%s" (to_string lid.txt) s.txt
+  | Lapply(lid1, lid2) ->
+      Printf.sprintf "%s(%s)" (to_string lid1.txt) (to_string lid2.txt)
 
 let rec same t t' =
   t == t'

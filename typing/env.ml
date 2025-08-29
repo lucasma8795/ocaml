@@ -23,6 +23,8 @@ open Path
 open Types
 open Data_types
 
+open Dbg
+
 open Local_store
 
 module String = Misc.Stdlib.String
@@ -995,6 +997,7 @@ let read_pers_mod cmi =
   Persistent_env.read (DLS.get persistent_env) read_sign_of_cmi cmi
 
 let find_pers_mod name =
+  dbg "find_pers_mod with name=%s\n" name;
   Persistent_env.find (DLS.get persistent_env) read_sign_of_cmi name
 
 let check_pers_mod ~loc name =
@@ -1078,12 +1081,15 @@ let check_functor_appl
 (* Lookup by identifier *)
 
 let find_ident_module id env =
+  dbg "find_ident_module %s\n" (Ident.to_string id);
+  (* Printexc.get_callstack 10 |> Printexc.raw_backtrace_to_string |> prerr_endline; *)
   match find_same_module id env.modules with
   | Mod_local data -> data
   | Mod_unbound _ -> raise Not_found
   | Mod_persistent -> find_pers_mod ~allow_hidden:true (Ident.name id)
 
 let rec find_module_components path env =
+  dbg "find_module_components with path=%s\n" (pp_path path);
   match path with
   | Pident id -> (find_ident_module id env).mda_components
   | Pdot(p, s) ->
@@ -1094,12 +1100,16 @@ let rec find_module_components path env =
       let loc = Location.(in_file (DLS.get input_name)) in
       !components_of_functor_appl' ~loc ~f_path ~f_comp ~arg env
   | Pextra_ty _ ->
+    dbg "find_module_components raises Not_found (unexpected Pextra_ty)\n";
     raise Not_found
 
 and find_structure_components path env =
+  dbg "find_structure_components with path=%s\n" (pp_path path);
   match get_components (find_module_components path env) with
   | Structure_comps c -> c
-  | Functor_comps _ -> raise Not_found
+  | Functor_comps _ ->
+    dbg "find_structure_components raises Not_found (unexpected Functor_comps)\n";
+    raise Not_found
 
 and find_functor_components path env =
   match get_components (find_module_components path env) with
@@ -1196,6 +1206,7 @@ let rec find_type_data path env =
       tda_shape = Shape.leaf decl.type_uid;
     }
   | exception Not_found -> begin
+      dbg "find_type_data hit Not_found, path %s\n" (pp_path path);
       match path with
       | Pident id -> IdTbl.find_same id env.types
       | Pdot(p, s) ->
@@ -1262,7 +1273,15 @@ let find_ident_label id env =
   TycompTbl.find_same id env.labels
 
 let find_type p env =
-  (find_type_data p env).tda_declaration
+  dbg "find_type %s\n" (Path.pp_path p);
+  let decl = (find_type_data p env).tda_declaration in
+  begin match decl.type_manifest with
+    | None -> dbg "find_type %s resolved to type <abstr>\n" (Path.pp_path p)
+    | Some desc ->
+        dbg "find_type %s resolved to type %s\n" (Path.pp_path p) (pp_type_desc desc.desc)
+  end;
+  decl
+
 let find_type_descrs p env =
   (find_type_data p env).tda_descriptions
 
@@ -1957,6 +1976,7 @@ and check_value_name name loc =
     done
 
 and store_value ?check id addr decl shape env =
+  dbg "store_value with id=%s type=%s\n" (Ident.to_string id) (pp_type_desc decl.val_type.desc);
   check_value_name (Ident.name id) decl.val_loc;
   Builtin_attributes.mark_alerts_used decl.val_attributes;
   Option.iter
@@ -2850,6 +2870,7 @@ let lookup_ident_module (type a) (load : a load) ~errors ~use ~loc s env =
     end
 
 let lookup_ident_value ~errors ~use ~loc name env =
+  dbg "lookup_ident_value %s\n" name;
   match IdTbl.find_name wrap_value ~mark:use name env.values with
   | (path, Val_bound vda) ->
       use_value ~use ~loc path vda;
@@ -3132,50 +3153,68 @@ let lookup_module_path ~errors ~use ~loc ~load lid env : Path.t =
       Papply(path_f, path_arg)
 
 let lookup_value ~errors ~use ~loc lid env =
-  match lid with
-  | Lident s -> lookup_ident_value ~errors ~use ~loc s env
-  | Ldot(l, s) -> lookup_dot_value ~errors ~use ~loc l s env
-  | Lapply _ -> assert false
+  dbg "lookup_value %s\n" (Longident.to_string lid);
+  let path, desc = match lid with
+    | Lident s -> lookup_ident_value ~errors ~use ~loc s env
+    | Ldot(l, s) -> lookup_dot_value ~errors ~use ~loc l s env
+    | Lapply _ -> assert false
+  in
+  dbg "lookup_value resolved to path %s, with type %s\n" (Path.pp_path path) (pp_type_desc desc.val_type.desc);
+  path, desc
 
 let lookup_type_full ~errors ~use ~loc lid env =
-  match lid with
-  | Lident s -> lookup_ident_type ~errors ~use ~loc s env
-  | Ldot(l, s) -> lookup_dot_type ~errors ~use ~loc l s env
-  | Lapply _ -> assert false
+  dbg "lookup_type_full %s\n" (Longident.to_string lid);
+  let path, decl = match lid with
+    | Lident s -> lookup_ident_type ~errors ~use ~loc s env
+    | Ldot(l, s) -> lookup_dot_type ~errors ~use ~loc l s env
+    | Lapply _ -> assert false
+  in
+  begin match decl.tda_declaration.type_manifest with
+    | Some desc -> dbg "lookup_type_full resolved to path %s and type %s\n" (Path.pp_path path) (pp_type_desc desc.desc)
+    | None -> dbg "lookup_type_full resolved to path %s and type <abstr>\n" (Path.pp_path path)
+  end;
+  path, decl
 
 let lookup_type ~errors ~use ~loc lid env =
+  dbg "lookup_type %s\n" (Longident.to_string lid);
   let (path, tda) = lookup_type_full ~errors ~use ~loc lid env in
   path, tda.tda_declaration
 
 let lookup_modtype_lazy ~errors ~use ~loc lid env =
+  dbg "lookup_modtype_lazy %s\n" (Longident.to_string lid);
   match lid with
   | Lident s -> lookup_ident_modtype ~errors ~use ~loc s env
   | Ldot(l, s) -> lookup_dot_modtype ~errors ~use ~loc l s env
   | Lapply _ -> assert false
 
 let lookup_modtype ~errors ~use ~loc lid env =
+  dbg "lookup_modtype %s\n" (Longident.to_string lid);
   let (path, mt) = lookup_modtype_lazy ~errors ~use ~loc lid env in
   path, Subst.Lazy.force_modtype_decl mt
 
 let lookup_class ~errors ~use ~loc lid env =
+  dbg "lookup_class %s\n" (Longident.to_string lid);
   match lid with
   | Lident s -> lookup_ident_class ~errors ~use ~loc s env
   | Ldot(l, s) -> lookup_dot_class ~errors ~use ~loc l s env
   | Lapply _ -> assert false
 
 let lookup_cltype ~errors ~use ~loc lid env =
+  dbg "lookup_cltype %s\n" (Longident.to_string lid);
   match lid with
   | Lident s -> lookup_ident_cltype ~errors ~use ~loc s env
   | Ldot(l, s) -> lookup_dot_cltype ~errors ~use ~loc l s env
   | Lapply _ -> assert false
 
 let lookup_all_labels ~errors ~use ~loc usage lid env =
+  dbg "lookup_all_labels %s\n" (Longident.to_string lid);
   match lid with
   | Lident s -> lookup_all_ident_labels ~errors ~use ~loc usage s env
   | Ldot(l, s) -> lookup_all_dot_labels ~errors ~use ~loc usage l s env
   | Lapply _ -> assert false
 
 let lookup_label ~errors ~use ~loc usage lid env =
+  dbg "lookup_label %s\n" (Longident.to_string lid);
   match lookup_all_labels ~errors ~use ~loc usage lid env with
   | [] -> assert false
   | (desc, use) :: _ -> use (); desc
@@ -3192,12 +3231,14 @@ let lookup_all_labels_from_type ~use ~loc usage ty_path env =
         lbls
 
 let lookup_all_constructors ~errors ~use ~loc usage lid env =
+  dbg "lookup_all_constructors %s\n" (Longident.to_string lid);
   match lid with
   | Lident s -> lookup_all_ident_constructors ~errors ~use ~loc usage s env
   | Ldot(l, s) -> lookup_all_dot_constructors ~errors ~use ~loc usage l s env
   | Lapply _ -> assert false
 
 let lookup_constructor ~errors ~use ~loc usage lid env =
+  dbg "lookup_constructor %s\n" (Longident.to_string lid);
   match lookup_all_constructors ~errors ~use ~loc usage lid env with
   | [] -> assert false
   | (desc, use) :: _ -> use (); desc
@@ -3220,34 +3261,42 @@ let lookup_all_constructors_from_type ~use ~loc usage ty_path env =
    than report errors *)
 
 let find_module_by_name lid env =
+  dbg "find_module_by_name %s\n" (Longident.to_string lid);
   let loc = Location.(in_file (DLS.get input_name)) in
   lookup_module ~errors:false ~use:false ~loc lid env
 
 let find_value_by_name lid env =
+  dbg "find_value_by_name %s\n" (Longident.to_string lid);
   let loc = Location.(in_file (DLS.get input_name)) in
   lookup_value ~errors:false ~use:false ~loc lid env
 
 let find_type_by_name lid env =
+  dbg "find_type_by_name %s\n" (Longident.to_string lid);
   let loc = Location.(in_file (DLS.get input_name)) in
   lookup_type ~errors:false ~use:false ~loc lid env
 
 let find_modtype_by_name lid env =
+  dbg "find_modtype_by_name %s\n" (Longident.to_string lid);
   let loc = Location.(in_file (DLS.get input_name)) in
   lookup_modtype ~errors:false ~use:false ~loc lid env
 
 let find_class_by_name lid env =
+  dbg "find_class_by_name %s\n" (Longident.to_string lid);
   let loc = Location.(in_file (DLS.get input_name)) in
   lookup_class ~errors:false ~use:false ~loc lid env
 
 let find_cltype_by_name lid env =
+  dbg "find_cltype_by_name %s\n" (Longident.to_string lid);
   let loc = Location.(in_file (DLS.get input_name)) in
   lookup_cltype ~errors:false ~use:false ~loc lid env
 
 let find_constructor_by_name lid env =
+  dbg "find_constructor_by_name %s\n" (Longident.to_string lid);
   let loc = Location.(in_file (DLS.get input_name)) in
   lookup_constructor ~errors:false ~use:false ~loc Positive lid env
 
 let find_label_by_name lid env =
+  dbg "find_label_by_name %s\n" (Longident.to_string lid);
   let loc = Location.(in_file (DLS.get input_name)) in
   lookup_label ~errors:false ~use:false ~loc Projection lid env
 
@@ -3271,9 +3320,11 @@ let find_cltype_index id env = find_index_tbl id env.cltypes
 (* Ordinary lookup functions *)
 
 let lookup_module_path ?(use=true) ~loc ~load lid env =
+  dbg "lookup_module_path %s\n" (Longident.to_string lid);
   lookup_module_path ~errors:true ~use ~loc ~load lid env
 
 let lookup_module ?(use=true) ~loc lid env =
+  dbg "lookup_module %s\n" (Longident.to_string lid);
   lookup_module ~errors:true ~use ~loc lid env
 
 let lookup_value ?(use=true) ~loc lid env =
@@ -3314,6 +3365,7 @@ let lookup_all_labels ?(use=true) ~loc usage lid env =
   | lbls -> Ok lbls
 
 let lookup_label ?(use=true) ~loc lid env =
+  (* dbg "lookup_label %s\n" (Longident.to_string lid); *)
   lookup_label ~errors:true ~use ~loc lid env
 
 let lookup_all_labels_from_type ?(use=true) ~loc usage ty_path env =

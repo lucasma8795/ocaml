@@ -32,6 +32,7 @@ utils/clflags.cmo : \
     utils/profile.cmi \
     utils/numbers.cmi \
     utils/misc.cmi \
+    utils/local_store.cmi \
     utils/config.cmi \
     utils/arg_helper.cmi \
     utils/clflags.cmi
@@ -39,6 +40,7 @@ utils/clflags.cmx : \
     utils/profile.cmx \
     utils/numbers.cmx \
     utils/misc.cmx \
+    utils/local_store.cmx \
     utils/config.cmx \
     utils/arg_helper.cmx \
     utils/clflags.cmi
@@ -79,6 +81,11 @@ utils/consistbl.cmx : \
     utils/consistbl.cmi
 utils/consistbl.cmi : \
     utils/misc.cmi
+utils/dbg.cmo : \
+    utils/dbg.cmi
+utils/dbg.cmx : \
+    utils/dbg.cmi
+utils/dbg.cmi :
 utils/diffing.cmo : \
     utils/misc.cmi \
     utils/format_doc.cmi \
@@ -152,16 +159,20 @@ utils/load_path.cmx : \
     utils/load_path.cmi
 utils/load_path.cmi :
 utils/local_store.cmo : \
+    utils/dbg.cmi \
     utils/local_store.cmi
 utils/local_store.cmx : \
+    utils/dbg.cmx \
     utils/local_store.cmi
 utils/local_store.cmi :
 utils/misc.cmo : \
+    utils/local_store.cmi \
     utils/format_doc.cmi \
     utils/config.cmi \
     utils/build_path_prefix_map.cmi \
     utils/misc.cmi
 utils/misc.cmx : \
+    utils/local_store.cmx \
     utils/format_doc.cmx \
     utils/config.cmx \
     utils/build_path_prefix_map.cmx \
@@ -212,10 +223,12 @@ utils/terminfo.cmx : \
 utils/terminfo.cmi :
 utils/warnings.cmo : \
     utils/misc.cmi \
+    utils/local_store.cmi \
     utils/format_doc.cmi \
     utils/warnings.cmi
 utils/warnings.cmx : \
     utils/misc.cmx \
+    utils/local_store.cmx \
     utils/format_doc.cmx \
     utils/warnings.cmi
 utils/warnings.cmi : \
@@ -226,6 +239,7 @@ parsing/ast_helper.cmo : \
     utils/misc.cmi \
     parsing/longident.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     parsing/docstrings.cmi \
     parsing/asttypes.cmi \
     parsing/ast_helper.cmi
@@ -235,6 +249,7 @@ parsing/ast_helper.cmx : \
     utils/misc.cmx \
     parsing/longident.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     parsing/docstrings.cmx \
     parsing/asttypes.cmx \
     parsing/ast_helper.cmi
@@ -287,6 +302,7 @@ parsing/ast_mapper.cmo : \
     utils/misc.cmi \
     parsing/longident.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     utils/load_path.cmi \
     utils/format_doc.cmi \
     utils/config.cmi \
@@ -299,6 +315,7 @@ parsing/ast_mapper.cmx : \
     utils/misc.cmx \
     parsing/longident.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     utils/load_path.cmx \
     utils/format_doc.cmx \
     utils/config.cmx \
@@ -344,6 +361,7 @@ parsing/builtin_attributes.cmo : \
     utils/misc.cmi \
     parsing/longident.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     utils/format_doc.cmi \
     utils/clflags.cmi \
     parsing/asttypes.cmi \
@@ -356,6 +374,7 @@ parsing/builtin_attributes.cmx : \
     utils/misc.cmx \
     parsing/longident.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     utils/format_doc.cmx \
     utils/clflags.cmx \
     parsing/asttypes.cmx \
@@ -376,6 +395,7 @@ parsing/depend.cmo : \
     utils/misc.cmi \
     parsing/longident.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     utils/clflags.cmi \
     parsing/builtin_attributes.cmi \
     parsing/asttypes.cmi \
@@ -385,6 +405,7 @@ parsing/depend.cmx : \
     utils/misc.cmx \
     parsing/longident.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     utils/clflags.cmx \
     parsing/builtin_attributes.cmx \
     parsing/asttypes.cmx \
@@ -397,11 +418,13 @@ parsing/docstrings.cmo : \
     utils/warnings.cmi \
     parsing/parsetree.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     parsing/docstrings.cmi
 parsing/docstrings.cmx : \
     utils/warnings.cmx \
     parsing/parsetree.cmi \
     parsing/location.cmx \
+    utils/local_store.cmx \
     parsing/docstrings.cmi
 parsing/docstrings.cmi : \
     parsing/parsetree.cmi \
@@ -411,6 +434,7 @@ parsing/lexer.cmo : \
     parsing/parser.cmi \
     utils/misc.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     utils/format_doc.cmi \
     parsing/docstrings.cmi \
     parsing/lexer.cmi
@@ -419,6 +443,7 @@ parsing/lexer.cmx : \
     parsing/parser.cmx \
     utils/misc.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     utils/format_doc.cmx \
     parsing/docstrings.cmx \
     parsing/lexer.cmi
@@ -429,6 +454,7 @@ parsing/location.cmo : \
     utils/warnings.cmi \
     utils/terminfo.cmi \
     utils/misc.cmi \
+    utils/local_store.cmi \
     utils/format_doc.cmi \
     utils/clflags.cmi \
     utils/build_path_prefix_map.cmi \
@@ -437,6 +463,7 @@ parsing/location.cmx : \
     utils/warnings.cmx \
     utils/terminfo.cmx \
     utils/misc.cmx \
+    utils/local_store.cmx \
     utils/format_doc.cmx \
     utils/clflags.cmx \
     utils/build_path_prefix_map.cmx \
@@ -460,6 +487,7 @@ parsing/parse.cmo : \
     parsing/parser.cmi \
     utils/misc.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     parsing/lexer.cmi \
     utils/format_doc.cmi \
     parsing/docstrings.cmi \
@@ -471,6 +499,7 @@ parsing/parse.cmx : \
     parsing/parser.cmx \
     utils/misc.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     parsing/lexer.cmx \
     utils/format_doc.cmx \
     parsing/docstrings.cmx \
@@ -682,6 +711,7 @@ typing/data_types.cmo : \
     typing/path.cmi \
     parsing/parsetree.cmi \
     parsing/location.cmi \
+    typing/ident.cmi \
     parsing/asttypes.cmi \
     typing/data_types.cmi
 typing/data_types.cmx : \
@@ -689,6 +719,7 @@ typing/data_types.cmx : \
     typing/path.cmx \
     parsing/parsetree.cmi \
     parsing/location.cmx \
+    typing/ident.cmx \
     parsing/asttypes.cmx \
     typing/data_types.cmi
 typing/data_types.cmi : \
@@ -739,6 +770,7 @@ typing/env.cmo : \
     utils/lazy_backtrack.cmi \
     typing/ident.cmi \
     utils/format_doc.cmi \
+    utils/dbg.cmi \
     typing/datarepr.cmi \
     typing/data_types.cmi \
     file_formats/cmi_format.cmi \
@@ -765,6 +797,7 @@ typing/env.cmx : \
     utils/lazy_backtrack.cmx \
     typing/ident.cmx \
     utils/format_doc.cmx \
+    utils/dbg.cmx \
     typing/datarepr.cmx \
     typing/data_types.cmx \
     file_formats/cmi_format.cmx \
@@ -795,6 +828,7 @@ typing/envaux.cmo : \
     typing/path.cmi \
     utils/misc.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     typing/ident.cmi \
     utils/format_doc.cmi \
     typing/env.cmi \
@@ -806,6 +840,7 @@ typing/envaux.cmx : \
     typing/path.cmx \
     utils/misc.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     typing/ident.cmx \
     utils/format_doc.cmx \
     typing/env.cmx \
@@ -1057,6 +1092,7 @@ typing/includemod_errorprinter.cmo : \
     typing/oprint.cmi \
     utils/misc.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     typing/includemod.cmi \
     typing/includecore.cmi \
     typing/includeclass.cmi \
@@ -1076,6 +1112,7 @@ typing/includemod_errorprinter.cmx : \
     typing/oprint.cmx \
     utils/misc.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     typing/includemod.cmx \
     typing/includecore.cmx \
     typing/includeclass.cmx \
@@ -1152,6 +1189,7 @@ typing/out_type.cmo : \
     utils/misc.cmi \
     parsing/longident.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     typing/ident.cmi \
     utils/format_doc.cmi \
     typing/errortrace.cmi \
@@ -1176,6 +1214,7 @@ typing/out_type.cmx : \
     utils/misc.cmx \
     parsing/longident.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     typing/ident.cmx \
     utils/format_doc.cmx \
     typing/errortrace.cmx \
@@ -1333,6 +1372,7 @@ typing/predef.cmo : \
     typing/path.cmi \
     parsing/parsetree.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     typing/ident.cmi \
     typing/btype.cmi \
     parsing/asttypes.cmi \
@@ -1344,6 +1384,7 @@ typing/predef.cmx : \
     typing/path.cmx \
     parsing/parsetree.cmi \
     parsing/location.cmx \
+    utils/local_store.cmx \
     typing/ident.cmx \
     typing/btype.cmx \
     parsing/asttypes.cmx \
@@ -1458,6 +1499,7 @@ typing/rawprinttyp.cmo : \
     parsing/pprintast.cmi \
     typing/path.cmi \
     parsing/longident.cmi \
+    utils/local_store.cmi \
     utils/format_doc.cmi \
     parsing/asttypes.cmi \
     typing/rawprinttyp.cmi
@@ -1466,6 +1508,7 @@ typing/rawprinttyp.cmx : \
     parsing/pprintast.cmx \
     typing/path.cmx \
     parsing/longident.cmx \
+    utils/local_store.cmx \
     utils/format_doc.cmx \
     parsing/asttypes.cmx \
     typing/rawprinttyp.cmi
@@ -1475,6 +1518,7 @@ typing/shape.cmo : \
     parsing/unit_info.cmi \
     typing/path.cmi \
     utils/misc.cmi \
+    utils/local_store.cmi \
     utils/identifiable.cmi \
     typing/ident.cmi \
     typing/shape.cmi
@@ -1482,6 +1526,7 @@ typing/shape.cmx : \
     parsing/unit_info.cmx \
     typing/path.cmx \
     utils/misc.cmx \
+    utils/local_store.cmx \
     utils/identifiable.cmx \
     typing/ident.cmx \
     typing/shape.cmi
@@ -1523,6 +1568,7 @@ typing/stypes.cmo : \
     typing/out_type.cmi \
     utils/misc.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     utils/clflags.cmi \
     typing/annot.cmi \
     typing/stypes.cmi
@@ -1532,6 +1578,7 @@ typing/stypes.cmx : \
     typing/out_type.cmx \
     utils/misc.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     utils/clflags.cmx \
     typing/annot.cmi \
     typing/stypes.cmi
@@ -1643,6 +1690,7 @@ typing/typeclass.cmo : \
     utils/misc.cmi \
     parsing/longident.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     typing/includeclass.cmi \
     typing/ident.cmi \
     utils/format_doc.cmi \
@@ -1675,6 +1723,7 @@ typing/typeclass.cmx : \
     utils/misc.cmx \
     parsing/longident.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     typing/includeclass.cmx \
     typing/ident.cmx \
     utils/format_doc.cmx \
@@ -1723,6 +1772,7 @@ typing/typecore.cmo : \
     utils/misc.cmi \
     parsing/longident.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     typing/ident.cmi \
     utils/format_doc.cmi \
     typing/errortrace_report.cmi \
@@ -1759,6 +1809,7 @@ typing/typecore.cmx : \
     utils/misc.cmx \
     parsing/longident.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     typing/ident.cmx \
     utils/format_doc.cmx \
     typing/errortrace_report.cmx \
@@ -2213,6 +2264,7 @@ typing/typetexp.cmo : \
     utils/misc.cmi \
     parsing/longident.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     utils/format_doc.cmi \
     typing/errortrace_report.cmi \
     typing/errortrace.cmi \
@@ -2237,6 +2289,7 @@ typing/typetexp.cmx : \
     utils/misc.cmx \
     parsing/longident.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     utils/format_doc.cmx \
     typing/errortrace_report.cmx \
     typing/errortrace.cmx \
@@ -2319,6 +2372,7 @@ bytecomp/bytegen.cmo : \
     typing/primitive.cmi \
     utils/misc.cmi \
     lambda/matching.cmi \
+    utils/local_store.cmi \
     lambda/lambda.cmi \
     bytecomp/instruct.cmi \
     typing/ident.cmi \
@@ -2334,6 +2388,7 @@ bytecomp/bytegen.cmx : \
     typing/primitive.cmx \
     utils/misc.cmx \
     lambda/matching.cmx \
+    utils/local_store.cmx \
     lambda/lambda.cmx \
     bytecomp/instruct.cmx \
     typing/ident.cmx \
@@ -2378,6 +2433,7 @@ bytecomp/bytelink.cmo : \
     bytecomp/opcodes.cmi \
     utils/misc.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     utils/load_path.cmi \
     utils/linkdeps.cmi \
     bytecomp/instruct.cmi \
@@ -2397,6 +2453,7 @@ bytecomp/bytelink.cmx : \
     bytecomp/opcodes.cmx \
     utils/misc.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     utils/load_path.cmx \
     utils/linkdeps.cmx \
     bytecomp/instruct.cmx \
@@ -2495,6 +2552,7 @@ bytecomp/emitcode.cmo : \
     bytecomp/opcodes.cmi \
     utils/misc.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     lambda/lambda.cmi \
     bytecomp/instruct.cmi \
     typing/ident.cmi \
@@ -2516,6 +2574,7 @@ bytecomp/emitcode.cmx : \
     bytecomp/opcodes.cmx \
     utils/misc.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     lambda/lambda.cmx \
     bytecomp/instruct.cmx \
     typing/ident.cmx \
@@ -2593,6 +2652,7 @@ bytecomp/symtable.cmo : \
     utils/misc.cmi \
     bytecomp/meta.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     lambda/lambda.cmi \
     typing/ident.cmi \
     utils/format_doc.cmi \
@@ -2607,6 +2667,7 @@ bytecomp/symtable.cmx : \
     utils/misc.cmx \
     bytecomp/meta.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     lambda/lambda.cmx \
     typing/ident.cmx \
     utils/format_doc.cmx \
@@ -4214,6 +4275,7 @@ middle_end/clambda_primitives.cmi : \
     parsing/asttypes.cmi
 middle_end/compilation_unit.cmo : \
     utils/misc.cmi \
+    utils/local_store.cmi \
     middle_end/linkage_name.cmi \
     utils/int_replace_polymorphic_compare.cmi \
     utils/identifiable.cmi \
@@ -4221,6 +4283,7 @@ middle_end/compilation_unit.cmo : \
     middle_end/compilation_unit.cmi
 middle_end/compilation_unit.cmx : \
     utils/misc.cmx \
+    utils/local_store.cmx \
     middle_end/linkage_name.cmx \
     utils/int_replace_polymorphic_compare.cmx \
     utils/identifiable.cmx \
@@ -4431,6 +4494,7 @@ lambda/lambda.cmo : \
     typing/path.cmi \
     utils/misc.cmi \
     parsing/longident.cmi \
+    utils/local_store.cmi \
     typing/ident.cmi \
     typing/env.cmi \
     lambda/debuginfo.cmi \
@@ -4444,6 +4508,7 @@ lambda/lambda.cmx : \
     typing/path.cmx \
     utils/misc.cmx \
     parsing/longident.cmx \
+    utils/local_store.cmx \
     typing/ident.cmx \
     typing/env.cmx \
     lambda/debuginfo.cmx \
@@ -4756,6 +4821,7 @@ lambda/translmod.cmo : \
     typing/mtype.cmi \
     utils/misc.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     lambda/lambda.cmi \
     typing/ident.cmi \
     utils/format_doc.cmi \
@@ -4780,6 +4846,7 @@ lambda/translmod.cmx : \
     typing/mtype.cmx \
     utils/misc.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     lambda/lambda.cmx \
     typing/ident.cmx \
     utils/format_doc.cmx \
@@ -4799,6 +4866,7 @@ lambda/translmod.cmi : \
 lambda/translobj.cmo : \
     typing/primitive.cmi \
     utils/misc.cmi \
+    utils/local_store.cmi \
     lambda/lambda.cmi \
     typing/ident.cmi \
     typing/env.cmi \
@@ -4810,6 +4878,7 @@ lambda/translobj.cmo : \
 lambda/translobj.cmx : \
     typing/primitive.cmx \
     utils/misc.cmx \
+    utils/local_store.cmx \
     lambda/lambda.cmx \
     typing/ident.cmx \
     typing/env.cmx \
@@ -4831,6 +4900,7 @@ lambda/translprim.cmo : \
     utils/misc.cmi \
     lambda/matching.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     lambda/lambda.cmi \
     typing/ident.cmi \
     utils/format_doc.cmi \
@@ -4849,6 +4919,7 @@ lambda/translprim.cmx : \
     utils/misc.cmx \
     lambda/matching.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     lambda/lambda.cmx \
     typing/ident.cmx \
     utils/format_doc.cmx \
@@ -4926,6 +4997,7 @@ file_formats/cmt_format.cmo : \
     utils/misc.cmi \
     parsing/longident.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     utils/load_path.cmi \
     parsing/lexer.cmi \
     typing/ident.cmi \
@@ -4950,6 +5022,7 @@ file_formats/cmt_format.cmx : \
     utils/misc.cmx \
     parsing/longident.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     utils/load_path.cmx \
     parsing/lexer.cmx \
     typing/ident.cmx \
@@ -6940,6 +7013,7 @@ driver/compenv.cmo : \
     utils/profile.cmi \
     utils/misc.cmi \
     parsing/location.cmi \
+    utils/local_store.cmi \
     utils/config.cmi \
     utils/clflags.cmi \
     utils/ccomp.cmi \
@@ -6949,6 +7023,7 @@ driver/compenv.cmx : \
     utils/profile.cmx \
     utils/misc.cmx \
     parsing/location.cmx \
+    utils/local_store.cmx \
     utils/config.cmx \
     utils/clflags.cmx \
     utils/ccomp.cmx \
@@ -7079,6 +7154,7 @@ driver/handler_common.cmo : \
     parsing/location.cmi \
     utils/local_store.cmi \
     utils/load_path.cmi \
+    utils/config.cmi \
     utils/clflags.cmi \
     driver/handler_common.cmi
 driver/handler_common.cmx : \
@@ -7086,6 +7162,7 @@ driver/handler_common.cmx : \
     parsing/location.cmx \
     utils/local_store.cmx \
     utils/load_path.cmx \
+    utils/config.cmx \
     utils/clflags.cmx \
     driver/handler_common.cmi
 driver/handler_common.cmi :
@@ -7902,11 +7979,13 @@ lex/lexer.cmi : \
 lex/lexgen.cmo : \
     lex/table.cmi \
     lex/syntax.cmi \
+    utils/local_store.cmi \
     lex/cset.cmi \
     lex/lexgen.cmi
 lex/lexgen.cmx : \
     lex/table.cmx \
     lex/syntax.cmx \
+    utils/local_store.cmx \
     lex/cset.cmx \
     lex/lexgen.cmi
 lex/lexgen.cmi : \
@@ -8108,6 +8187,7 @@ tools/ocamlcmt.cmo : \
     parsing/pprintast.cmi \
     parsing/location.cmi \
     utils/load_path.cmi \
+    driver/handler_common.cmi \
     typing/envaux.cmi \
     driver/compmisc.cmi \
     file_formats/cmt_format.cmi \
@@ -8121,6 +8201,7 @@ tools/ocamlcmt.cmx : \
     parsing/pprintast.cmx \
     parsing/location.cmx \
     utils/load_path.cmx \
+    driver/handler_common.cmx \
     typing/envaux.cmx \
     driver/compmisc.cmx \
     file_formats/cmt_format.cmx \
@@ -9113,7 +9194,6 @@ ocamldoc/odoc_comments.cmo : \
     ocamldoc/odoc_types.cmi \
     ocamldoc/odoc_text.cmi \
     ocamldoc/odoc_see_lexer.cmi \
-    ocamldoc/odoc_parser.cmi \
     ocamldoc/odoc_misc.cmi \
     ocamldoc/odoc_messages.cmi \
     ocamldoc/odoc_merge.cmi \
@@ -9126,12 +9206,11 @@ ocamldoc/odoc_comments.cmx : \
     otherlibs/str/str.cmx \
     ocamldoc/odoc_types.cmx \
     ocamldoc/odoc_text.cmx \
-    ocamldoc/odoc_see_lexer.cmx \
-    ocamldoc/odoc_parser.cmx \
+    ocamldoc/odoc_see_lexer.cmi \
     ocamldoc/odoc_misc.cmx \
     ocamldoc/odoc_messages.cmx \
     ocamldoc/odoc_merge.cmx \
-    ocamldoc/odoc_lexer.cmx \
+    ocamldoc/odoc_lexer.cmi \
     ocamldoc/odoc_global.cmx \
     ocamldoc/odoc_cross.cmx \
     ocamldoc/odoc_comments_global.cmx \
@@ -9442,24 +9521,7 @@ ocamldoc/odoc_latex_style.cmo : \
 ocamldoc/odoc_latex_style.cmx : \
     ocamldoc/odoc_latex_style.cmi
 ocamldoc/odoc_latex_style.cmi :
-ocamldoc/odoc_lexer.cmo : \
-    otherlibs/str/str.cmi \
-    ocamldoc/odoc_parser.cmi \
-    ocamldoc/odoc_messages.cmi \
-    ocamldoc/odoc_global.cmi \
-    ocamldoc/odoc_comments_global.cmi \
-    utils/misc.cmi \
-    ocamldoc/odoc_lexer.cmi
-ocamldoc/odoc_lexer.cmx : \
-    otherlibs/str/str.cmx \
-    ocamldoc/odoc_parser.cmx \
-    ocamldoc/odoc_messages.cmx \
-    ocamldoc/odoc_global.cmx \
-    ocamldoc/odoc_comments_global.cmx \
-    utils/misc.cmx \
-    ocamldoc/odoc_lexer.cmi
-ocamldoc/odoc_lexer.cmi : \
-    ocamldoc/odoc_parser.cmi
+ocamldoc/odoc_lexer.cmi :
 ocamldoc/odoc_man.cmo : \
     otherlibs/str/str.cmi \
     middle_end/flambda/parameter.cmi \
@@ -9617,16 +9679,6 @@ ocamldoc/odoc_parameter.cmx : \
 ocamldoc/odoc_parameter.cmi : \
     typing/types.cmi \
     ocamldoc/odoc_types.cmi
-ocamldoc/odoc_parser.cmo : \
-    ocamldoc/odoc_types.cmi \
-    ocamldoc/odoc_comments_global.cmi \
-    ocamldoc/odoc_parser.cmi
-ocamldoc/odoc_parser.cmx : \
-    ocamldoc/odoc_types.cmx \
-    ocamldoc/odoc_comments_global.cmx \
-    ocamldoc/odoc_parser.cmi
-ocamldoc/odoc_parser.cmi : \
-    ocamldoc/odoc_types.cmi
 ocamldoc/odoc_print.cmo : \
     typing/types.cmi \
     typing/printtyp.cmi \
@@ -9698,14 +9750,7 @@ ocamldoc/odoc_search.cmi : \
     ocamldoc/odoc_extension.cmi \
     ocamldoc/odoc_exception.cmi \
     ocamldoc/odoc_class.cmi
-ocamldoc/odoc_see_lexer.cmo : \
-    ocamldoc/odoc_parser.cmi \
-    ocamldoc/odoc_see_lexer.cmi
-ocamldoc/odoc_see_lexer.cmx : \
-    ocamldoc/odoc_parser.cmx \
-    ocamldoc/odoc_see_lexer.cmi
-ocamldoc/odoc_see_lexer.cmi : \
-    ocamldoc/odoc_parser.cmi
+ocamldoc/odoc_see_lexer.cmi :
 ocamldoc/odoc_sig.cmo : \
     parsing/unit_info.cmi \
     typing/types.cmi \
@@ -9837,40 +9882,15 @@ ocamldoc/odoc_texi.cmi : \
     ocamldoc/odoc_info.cmi
 ocamldoc/odoc_text.cmo : \
     ocamldoc/odoc_types.cmi \
-    ocamldoc/odoc_text_parser.cmi \
     ocamldoc/odoc_text_lexer.cmi \
     ocamldoc/odoc_text.cmi
 ocamldoc/odoc_text.cmx : \
     ocamldoc/odoc_types.cmx \
-    ocamldoc/odoc_text_parser.cmx \
-    ocamldoc/odoc_text_lexer.cmx \
+    ocamldoc/odoc_text_lexer.cmi \
     ocamldoc/odoc_text.cmi
 ocamldoc/odoc_text.cmi : \
     ocamldoc/odoc_types.cmi
-ocamldoc/odoc_text_lexer.cmo : \
-    otherlibs/str/str.cmi \
-    ocamldoc/odoc_text_parser.cmi \
-    ocamldoc/odoc_misc.cmi \
-    ocamldoc/odoc_text_lexer.cmi
-ocamldoc/odoc_text_lexer.cmx : \
-    otherlibs/str/str.cmx \
-    ocamldoc/odoc_text_parser.cmx \
-    ocamldoc/odoc_misc.cmx \
-    ocamldoc/odoc_text_lexer.cmi
-ocamldoc/odoc_text_lexer.cmi : \
-    ocamldoc/odoc_text_parser.cmi
-ocamldoc/odoc_text_parser.cmo : \
-    otherlibs/str/str.cmi \
-    ocamldoc/odoc_types.cmi \
-    ocamldoc/odoc_misc.cmi \
-    ocamldoc/odoc_text_parser.cmi
-ocamldoc/odoc_text_parser.cmx : \
-    otherlibs/str/str.cmx \
-    ocamldoc/odoc_types.cmx \
-    ocamldoc/odoc_misc.cmx \
-    ocamldoc/odoc_text_parser.cmi
-ocamldoc/odoc_text_parser.cmi : \
-    ocamldoc/odoc_types.cmi
+ocamldoc/odoc_text_lexer.cmi :
 ocamldoc/odoc_to_text.cmo : \
     otherlibs/str/str.cmi \
     middle_end/flambda/parameter.cmi \

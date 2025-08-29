@@ -61,6 +61,7 @@ expunge := expunge$(EXE)
 # Targets and dependencies for the compilerlibs/*.{cma,cmxa} archives
 
 utils_SOURCES = $(addprefix utils/, \
+  dbg.mli dbg.ml \
   local_store.mli local_store.ml \
   config.mli config.ml \
   build_path_prefix_map.mli build_path_prefix_map.ml \
@@ -1669,6 +1670,7 @@ partialclean::
 ocamllex_LIBRARIES =
 
 ocamllex_SOURCES = \
+  utils/dbg.mli utils/dbg.ml \
   utils/local_store.mli utils/local_store.ml \
   $(addprefix lex/,\
     cset.mli cset.ml \
@@ -2329,6 +2331,7 @@ tools/ocamldep$(EXE): OC_BYTECODE_LINKFLAGS += -compat-32
 
 ocamlprof_LIBRARIES =
 ocamlprof_SOURCES = \
+  dbg.mli dbg.ml \
   local_store.mli local_store.ml \
   config.mli config.ml \
   build_path_prefix_map.mli build_path_prefix_map.ml \
@@ -2356,6 +2359,7 @@ ocamlprof_SOURCES = \
   ocamlprof.mli ocamlprof.ml
 
 ocamlcp_ocamloptp_SOURCES = \
+  dbg.mli dbg.ml \
   local_store.mli local_store.ml \
   config.mli config.ml \
   build_path_prefix_map.mli build_path_prefix_map.ml \
@@ -2384,6 +2388,7 @@ ocamloptp_SOURCES = $(ocamlcp_ocamloptp_SOURCES) ocamloptp.mli ocamloptp.ml
 # To help building mixed-mode libraries (OCaml + C)
 ocamlmklib_LIBRARIES =
 ocamlmklib_SOURCES = \
+  dbg.mli dbg.ml \
   local_store.mli local_store.ml \
   config.ml \
   build_path_prefix_map.ml \
@@ -2395,6 +2400,7 @@ ocamlmklib_SOURCES = \
 
 ocamlmktop_LIBRARIES =
 ocamlmktop_SOURCES = \
+  dbg.mli dbg.ml \
   local_store.mli local_store.ml \
   config.mli config.ml \
   build_path_prefix_map.mli build_path_prefix_map.ml \

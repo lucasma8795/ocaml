@@ -13,6 +13,8 @@
 (*                                                                        *)
 (**************************************************************************)
 
+open Dbg
+
 module DLS = Domain.DLS
 
 type ref_and_reset =
@@ -22,16 +24,12 @@ type ref_and_reset =
 type bindings = {
   mutable refs: ref_and_reset list;
   mutable frozen : bool;
-  is_bound: bool DLS.key;
 }
 
 let global_bindings =
-  { refs = []; is_bound = DLS.new_key (fun () -> false); frozen = false }
-
-let is_bound () = DLS.get global_bindings.is_bound
+  { refs = []; frozen = false }
 
 let reset () =
-  assert (is_bound ());
   List.iter (function
     | Table { ref; init } -> DLS.set ref (init ())
     | Ref { ref; snapshot } -> DLS.set ref snapshot
@@ -62,42 +60,53 @@ let freeze () =
     | Table _ -> ()
     | Ref r -> r.snapshot <- DLS.get r.ref
   ) global_bindings.refs;
-  Printf.eprintf "%d -> [local_store:freeze] bound initial values of global state!\n%!" (Domain.self () :> int)
-
-let fresh name : store =
-  assert (global_bindings.frozen);
-  let slots =
-    List.map (function
-      | Table { ref; init } -> Slot {ref; value = init ()}
-      | Ref r -> Slot { ref = r.ref; value = r.snapshot }
-    ) global_bindings.refs
-  in
-  Printf.eprintf "%d -> [local_store:fresh] created new store with %d slots\n%!" (Domain.self () :> int) (List.length slots);
-  slots, name
+  dbg "[local_store:freeze] bound initial values of global state!\n%!"
 
 let active_store_name = DLS.new_key (fun () -> None)
 
-let open_store (slots, name) =
+let is_bound () = DLS.get active_store_name <> None
+
+let snapshot name : store =
+  (* assert (DLS.get active_store_name <> None);
+  DLS.set active_store_name None; *)
+  let slots =
+    List.map (function
+      | Table { ref; _ } -> Slot { ref; value = DLS.get ref }
+      | Ref { ref; _ }   -> Slot { ref; value = DLS.get ref }
+    ) global_bindings.refs
+  in
+  (* make sure ref contents aren't physically shared *)
+  reset ();
+  dbg "[local_store:snapshot] snapshot %d slots to store '%s'\n%!" (List.length slots) name;
+  slots, name
+
+let restore (slots, name) =
+  (* assert (DLS.get active_store_name = None);
+  DLS.set active_store_name (Some name); *)
+  List.iter (fun (Slot { ref; value }) -> DLS.set ref value) slots;
+  dbg "[local_store:restore] restored %d slots from store '%s'\n%!" (List.length slots) name
+
+(* let open_store (slots, name) =
   if (DLS.get active_store_name <> None) then
-    Printf.eprintf "%d -> [local_store:open_store] error: store with name '%s' is already active\n%!"
-      (Domain.self () :> int) (Option.get (DLS.get active_store_name));
+    dbg "[local_store:open_store] error: store with name '%s' is already active\n%!"
+      (Option.get (DLS.get active_store_name));
 
   assert (DLS.get active_store_name = None);
   assert (not (is_bound ()));
   DLS.set global_bindings.is_bound true;
   DLS.set active_store_name (Some name);
-  Printf.eprintf "%d -> [local_store:open_store] restored %d slots for store '%s'\n%!" (Domain.self () :> int) (List.length slots) name;
+  dbg "[local_store:open_store] restored %d slots for store '%s'\n%!" (List.length slots) name;
   List.iter (fun (Slot { ref; value }) -> DLS.set ref value) slots
 
 let close_store (slots, name) =
   if (DLS.get active_store_name <> Some name) then begin
     match DLS.get active_store_name with
     | None ->
-      Printf.eprintf "%d -> [local_store:close_store] error: tried to close '%s' but there was no active store\n%!"
-        (Domain.self () :> int) name
+      dbg "[local_store:close_store] error: tried to close '%s' but there was no active store\n%!"
+        name
     | Some active_name ->
-        Printf.eprintf "%d -> [local_store:close_store] error: store with name '%s' is active but tried to close '%s'!\n%!"
-          (Domain.self () :> int) active_name name
+        dbg "[local_store:close_store] error: store with name '%s' is active but tried to close '%s'!\n%!"
+          active_name name
   end;
 
   assert (DLS.get active_store_name = Some name);
@@ -105,5 +114,5 @@ let close_store (slots, name) =
   DLS.set global_bindings.is_bound false;
   DLS.set active_store_name None;
 
-  Printf.eprintf "%d -> [local_store:close_store] saved %d slots to store '%s'\n%!" (Domain.self () :> int) (List.length slots) name;
-  List.iter (fun (Slot s) -> s.value <- DLS.get s.ref) slots
+  dbg "[local_store:close_store] saved %d slots to store '%s'\n%!" (List.length slots) name;
+  List.iter (fun (Slot s) -> s.value <- DLS.get s.ref) slots *)

@@ -206,9 +206,9 @@ let to_string =
   in
   function
   | Global name ->
-      Printf.sprintf "%s!" name
+      Printf.sprintf "%s" name
   | Predef { name; stamp } ->
-      Printf.sprintf "%s!" (pp_stamped (name, stamp))
+      Printf.sprintf "%s" (pp_stamped (name, stamp))
   | Local { name; stamp } ->
       Printf.sprintf "%s" (pp_stamped (name, stamp))
   | Scoped { name; stamp; scope } ->

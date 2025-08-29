@@ -150,3 +150,11 @@ module T = struct
 end
 module Set = Set.Make(T)
 module Map = Map.Make(T)
+
+let rec pp_path (p : t) =
+  match p with
+  | Pident id -> Ident.to_string id
+  | Pdot(p, s) | Pextra_ty (p, Pcstr_ty s) ->
+      Printf.sprintf "%s.%s" (pp_path p) s
+  | Papply(p1, p2) -> Printf.sprintf "%s(%s)" (pp_path p1) (pp_path p2)
+  | Pextra_ty (p, Pext_ty) -> pp_path p

@@ -38,13 +38,16 @@ module Persistent_signature = struct
       visibility : Load_path.visibility }
 
   let load = ref (fun ~allow_hidden ~unit_name ->
+    Dbg.dbg "persistent_env: load with unit_name=%s\n" unit_name;
     match Load_path.find_normalized_with_visibility (unit_name ^ ".cmi") with
     | filename, visibility when allow_hidden ->
       Some { filename; cmi = read_cmi filename; visibility}
     | filename, Visible ->
       Some { filename; cmi = read_cmi filename; visibility = Visible}
     | _, Hidden
-    | exception Not_found -> None)
+    | exception Not_found ->
+      Dbg.dbg "persistent_env: load returns None\n"; None
+  )
 end
 
 type can_load_cmis =
@@ -210,22 +213,32 @@ let read_pers_struct penv val_of_pers_sig check cmi =
   (ps, pm)
 
 let find_pers_struct ~allow_hidden penv val_of_pers_sig check name =
+  Dbg.dbg "find_pers_struct with name=%s\n" name;
   let {persistent_structures; _} = penv in
   if name = "*predef*" then raise Not_found;
   match Hashtbl.find persistent_structures name with
   | Found (ps, pm) when allow_hidden || ps.ps_visibility = Load_path.Visible ->
+    Dbg.dbg "persistent_env: find_pers_struct ok (Found)\n";
     (ps, pm)
-  | Found _ -> raise Not_found
-  | Missing -> raise Not_found
+  | Found _ ->
+    Dbg.dbg "persistent_env: find_pers_struct raises Not_found (failed match with Found)\n";
+    raise Not_found
+  | Missing ->
+    Dbg.dbg "persistent_env: find_pers_struct raises Not_found (unexpected Missing)\n";
+    raise Not_found
   | exception Not_found ->
+    Dbg.dbg "persistent_env: find_pers_struct catches Not_found\n";
     match can_load_cmis penv with
-    | Cannot_load_cmis _ -> raise Not_found
+    | Cannot_load_cmis _ ->
+      Dbg.dbg "persistent_env: find_pers_struct raises Not_found (Cannot_load_cmis)\n";
+      raise Not_found
     | Can_load_cmis ->
         let psig =
           match !Persistent_signature.load ~allow_hidden ~unit_name:name with
           | Some psig -> psig
           | None ->
             if allow_hidden then Hashtbl.add persistent_structures name Missing;
+            Dbg.dbg "persistent_env: find_pers_struct raises Not_found (load failed)\n";
             raise Not_found
         in
         add_import penv name;
@@ -271,6 +284,7 @@ let read penv f a =
   snd (read_pers_struct penv f true a)
 
 let find ~allow_hidden penv f name =
+  Dbg.dbg "persistent_env: find with name=%s\n" name;
   snd (find_pers_struct ~allow_hidden penv f true name)
 
 let check ~allow_hidden penv f ~loc name =

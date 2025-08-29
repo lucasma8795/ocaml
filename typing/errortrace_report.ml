@@ -402,6 +402,7 @@ let mismatch intro env trace =
   Errortrace.explain trace (fun ~prev h -> explanation intro prev env h)
 
 let warn_on_missing_def env ppf t =
+  Dbg.dbg "warn_on_missing_def %s\n" (Types.pp_type_desc (Types.get_desc t));
   match Types.get_desc t with
   | Tconstr (p,_,_) ->
     begin match Env.find_type p env with

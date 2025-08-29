@@ -22,8 +22,6 @@ open Data_types
 open Btype
 open Errortrace
 
-open Local_store
-
 module DLS = Domain.DLS
 
 (*
@@ -165,7 +163,7 @@ let wrap_trace_gadt_instances ?force env f x =
 (**** Abbreviations without parameters ****)
 (* Shall reset after generalizing *)
 
-let simple_abbrevs = s_table ref Mnil
+let simple_abbrevs = Local_store.s_table ref Mnil
 
 let proper_abbrevs tl abbrev =
   if tl <> [] || (DLS.get trace_gadt_instances) || !Clflags.principal
@@ -174,10 +172,10 @@ let proper_abbrevs tl abbrev =
 
 (**** Type level management ****)
 
-let current_level = s_ref 0
-let nongen_level = s_ref 0
-let global_level = s_ref 0
-let saved_level = s_ref []
+let current_level = Local_store.s_ref 0
+let nongen_level = Local_store.s_ref 0
+let global_level = Local_store.s_ref 0
+let saved_level = Local_store.s_ref []
 
 let get_current_level () = DLS.get current_level
 let init_def level = DLS.set current_level level; DLS.set nongen_level level
@@ -1139,7 +1137,7 @@ let rec find_repr p1 =
    scope and performing the necessary book-keeping -- in particular
    reverting the in-place updates after the instantiation is done. *)
 
-let abbreviations = s_table ref Mnil
+let abbreviations = Local_store.s_table ref Mnil
   (* Abbreviation memorized. *)
 
 (* partial: we may not wish to copy the non generic types

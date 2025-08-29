@@ -81,3 +81,5 @@ val is_constructor_typath: t -> bool
 
 module Map : Map.S with type key = t
 module Set : Set.S with type elt = t
+
+val pp_path : t -> string

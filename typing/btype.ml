@@ -18,8 +18,6 @@
 open Asttypes
 open Types
 
-open Local_store
-
 module DLS = Domain.DLS
 
 (**** Sets, maps and hashtables of types ****)
@@ -118,7 +116,7 @@ type pool = {level: int; mutable pool: transient_expr list; next: pool}
    the list. It will never be accessed, as [pool_of_level] is always called
    with [level >= 0]. *)
 let rec dummy = {level = max_int; pool = []; next = dummy}
-let pool_stack = s_table (fun () -> {level = 0; pool = []; next = dummy}) ()
+let pool_stack = Local_store.s_table (fun () -> {level = 0; pool = []; next = dummy}) ()
 
 (* Lookup in the stack is linear, but the depth is the number of nested
    generalization points (e.g. lhs of let-definitions), which in ML is known
@@ -513,8 +511,10 @@ let copy_row f fixed row keep more =
 
 let copy_commu c = if is_commu_ok c then commu_ok else commu_var ()
 
-let rec copy_type_desc ?(keep_names=false) f = function
-    Tvar _ as ty        -> if keep_names then ty else Tvar None
+let rec copy_type_desc ?(keep_names=false) f desc =
+  Dbg.dbg "copy_type_desc %s\n" (pp_type_desc desc);
+  match desc with
+  | Tvar _ as ty        -> if keep_names then ty else Tvar None
   | Tarrow (p, ty1, ty2, c)-> Tarrow (p, f ty1, f ty2, copy_commu c)
   | Ttuple l            -> Ttuple (List.map (fun (label, t) -> label, f t) l)
   | Tconstr (p, l, _)   -> Tconstr (p, List.map f l, ref Mnil)
@@ -595,7 +595,7 @@ let rec check_expans visited ty =
   | _ -> ()
 *)
 
-let memo = s_ref []
+let memo = Local_store.s_ref []
         (* Contains the list of saved abbreviation expansions. *)
 
 let cleanup_abbrev () =
