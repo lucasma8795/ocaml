@@ -106,30 +106,31 @@ let rec pp_path (p : Path.t) =
   | Papply(p1, p2) -> Printf.sprintf "%s(%s)" (pp_path p1) (pp_path p2)
   | Pextra_ty (p, Pext_ty) -> pp_path p
 
-let rec pp_type_desc = function
-  | Tvar None -> "Tvar None"
-  | Tvar (Some id) -> Printf.sprintf "Tvar (%s)" id
-  | Tarrow (_, from, _to, _) ->
-    Printf.sprintf "Tarrow (_, %s, %s, _)" (pp_type_desc from.desc) (pp_type_desc _to.desc)
-  | Ttuple _ -> "Ttuple _"
-  | Tconstr (path, args, _) ->
-    let args = List.map (fun arg -> pp_type_desc arg.desc) args in
-    Printf.sprintf "Tconstr (%s, [%s], _)" (pp_path path) (String.concat ", " args)
-  | Tobject _ -> "Tobject _"
-  | Tfield _ -> "Tfield _"
-  | Tnil -> "Tnil"
-  | Tlink expr -> Printf.sprintf "Tlink (%s)" (pp_type_desc expr.desc)
-  | Tsubst _ -> "Tsubst _"
-  (* | Tsubst (expr, _) -> Printf.sprintf "Tsubst (%s, _)" (pp_type_desc expr.desc) *)
-  | Tvariant _ -> "Tvariant _"
-  | Tunivar _ -> "Tunivar _"
-  | Tpoly _ -> "Tpoly _"
-  | Tpackage _ -> "Tpackage _"
+let phy x : int = Obj.magic (Obj.repr x)
 
+let rec pp_type_desc desc =
+  (match desc with
+    | Tvar None -> "Tvar None"
+    | Tvar (Some id) -> Printf.sprintf "Tvar (%s)" id
+    | Tarrow (_, from, _to, _) ->
+      Printf.sprintf "Tarrow (_, %s, %s, _)" (pp_type_desc from.desc) (pp_type_desc _to.desc)
+    | Ttuple _ -> "Ttuple _"
+    | Tconstr (path, args, _) ->
+      let args = List.map (fun arg -> pp_type_desc arg.desc) args in
+      Printf.sprintf "Tconstr (%s, [%s], _)" (pp_path path) (String.concat ", " args)
+    | Tobject _ -> "Tobject _"
+    | Tfield _ -> "Tfield _"
+    | Tnil -> "Tnil"
+    | Tlink expr -> Printf.sprintf "Tlink (%s)" (pp_type_desc expr.desc)
+    | Tsubst _ -> "Tsubst _"
+    (* | Tsubst (expr, _) -> Printf.sprintf "Tsubst (%s, _)" (pp_type_desc expr.desc) *)
+    | Tvariant _ -> "Tvariant _"
+    | Tunivar _ -> "Tunivar _"
+    | Tpoly _ -> "Tpoly _"
+    | Tpackage _ -> "Tpackage _"
+  ) ^ (Printf.sprintf " [phy=%d]" (phy desc))
 
 module TransientTypeHash = Hashtbl.Make(TransientTypeOps)
-
-(* *)
 
 module Uid = Shape.Uid
 

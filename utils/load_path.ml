@@ -124,16 +124,16 @@ let auto_include_otherlibs alert find_in_dir fn =
 
 let find fn =
   assert (not Config.merlin || Local_store.is_bound ());
-  (* let snapshot = Local_store.snapshot (string_of_int (Random.bits ())) in *)
+  let snapshot = Local_store.snapshot (string_of_int (Random.bits ())) in
   let ret = perform (Find_path fn) in
-  (* Local_store.restore snapshot; *)
+  Local_store.restore snapshot;
   ret
 
 let find_normalized_with_visibility fn =
   assert (not Config.merlin || Local_store.is_bound ());
-  (* let snapshot = Local_store.snapshot (string_of_int (Random.bits ())) in *)
+  let snapshot = Local_store.snapshot (string_of_int (Random.bits ())) in
   let ret = perform (Find_normalized_with_visibility fn) in
-  (* Local_store.restore snapshot; *)
+  Local_store.restore snapshot;
   ret
 
 let find_normalized fn = fst (find_normalized_with_visibility fn)

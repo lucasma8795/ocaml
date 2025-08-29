@@ -1,6 +1,6 @@
 let dbg_lock = Mutex.create ()
 
-let dbg_enabled = false
+let dbg_enabled = true
 
 let dbg fmt =
   if dbg_enabled then
