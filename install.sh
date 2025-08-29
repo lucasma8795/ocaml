@@ -171,7 +171,9 @@ error() { log "ERROR" "$@"; }
 clean_workspace()
 {
   info "Cleaning workspace..."
-  git clean -dfX >> /dev/null
+  # git clean -dfX >> /dev/null
+  rm -rf *.cmo
+  rm -rf *.cma
 }
 
 # Suppress outputs (stdout, stderr) and redirect to logfile
@@ -209,7 +211,7 @@ init_build()
   fi
 
   # Set up log files
-  mkdir "$INSTALL_DIR"
+  # mkdir "$INSTALL_DIR"
   cat /dev/null > "$LOG_FILE"
 
   # Build custom compiler

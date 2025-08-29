@@ -17,3 +17,5 @@ val err_msgs: Includemod.explanation Format_doc.printer
 val coercion_in_package_subtype:
   Env.t -> Types.module_type -> Typedtree.module_coercion -> Format_doc.doc
 val register: unit -> unit
+
+val report_error_doc : Includemod.explanation

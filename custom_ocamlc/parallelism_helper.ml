@@ -1,6 +1,7 @@
 open Effect
 open Effect.Deep
 open Custom_misc
+open Dbg
 
 type 'a promise_state =
 | Pending
@@ -196,8 +197,35 @@ module Pool = struct
             let result = task () in
             Atomic.set promise (Resolved result);
             Atomic.decr p.active_tasks;
+
           with exn ->
+            begin match exn with
+            | Typecore.Error(loc, env, err) ->
+              dbg "[pool/submit] task failed with Typecore.Error, details below:\n";
+              let report = Typecore.report_error ~loc env err in
+              Location.print_report Format.err_formatter report;
+              flush stderr
+
+            | Typetexp.Error(loc, env, err) ->
+              dbg "[pool/submit] task failed with Typetexp.Error, details below:\n";
+              let report = Typetexp.report_error_doc loc env err in
+              Location.print_report Format.err_formatter report;
+              flush stderr
+
+            | Includemod.Error e ->
+              dbg "[pool/submit] task failed with Includemod.Error, details below:\n";
+              let report = Includemod_errorprinter.report_error_doc e in
+              Location.print_report Format.err_formatter report;
+              flush stderr
+
+            | _ -> ()
+            end;
+
             dbg "[pool/submit] task failed with exception: %s\n" (Printexc.to_string exn);
+
+            (* we don't want to re-raise exn, since the main domain doesn't have
+               typing information, which leads to spurious error messages *)
+            let exn = Failure "" in
             Atomic.set promise (Rejected exn);
             Atomic.decr p.active_tasks
         in

@@ -1,19 +1,5 @@
 open Clflags
-
-let dbg_lock = Mutex.create ()
-
-let dbg fmt =
-  Mutex.protect dbg_lock (fun () ->
-    let ret = Printf.eprintf ("%d -> " ^^ fmt) (Domain.self () :> int) in
-    flush stderr;
-    ret
-  )
-
-let dbg_print_backtrace () =
-  Mutex.protect dbg_lock (fun () ->
-    Printexc.print_backtrace stderr;
-    flush stderr
-  )
+open Dbg
 
 let compile_implementation ctx impl_filename =
   dbg "[compile_implementation] entering (file=%s)\n" impl_filename;

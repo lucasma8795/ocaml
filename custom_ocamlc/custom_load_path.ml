@@ -1,5 +1,6 @@
 open Load_path
 open Custom_misc
+open Dbg
 
 module STbl = Misc.Stdlib.String.Tbl
 
@@ -56,8 +57,10 @@ let append_dir dir =
   )
 
 let get_path_list () =
-  let acc = List.rev_map Dir.path !hidden_dirs in
-  Misc.rev_map_end Dir.path !visible_dirs acc
+  protect (fun () ->
+    let acc = List.rev_map Dir.path !hidden_dirs in
+    Misc.rev_map_end Dir.path !visible_dirs acc
+  )
 
 let auto_include_libs libs alert find_in_dir fn =
   dbg "[auto_include] (entering with fn=%s)\n" fn;
@@ -78,12 +81,14 @@ let auto_include_libs libs alert find_in_dir fn =
   end
 
 let auto_include_otherlibs =
-  (* Ensure directories are only ever scanned once *)
-  let expand = Misc.expand_directory Config.standard_library in
-  let otherlibs =
-    let read_lib lib = lazy (Dir.create ~hidden:false (expand ("+" ^ lib))) in
-    List.map (fun lib -> (lib, read_lib lib)) ["dynlink"; "str"; "unix"] in
-  auto_include_libs otherlibs
+  protect (fun () ->
+    (* Ensure directories are only ever scanned once *)
+    let expand = Misc.expand_directory Config.standard_library in
+    let otherlibs =
+      let read_lib lib = lazy (Dir.create ~hidden:false (expand ("+" ^ lib))) in
+      List.map (fun lib -> (lib, read_lib lib)) ["dynlink"; "str"; "unix"] in
+    auto_include_libs otherlibs
+  )
 
 let auto_include find_in_dir fn =
   if !Clflags.no_std_include then begin
@@ -95,7 +100,7 @@ let auto_include find_in_dir fn =
     auto_include_otherlibs alert find_in_dir fn
   end
 
-let prepend_add dir =
+let prepend_add_unsafe dir =
   List.iter (fun base ->
     Result.iter (fun filename ->
       let fn = Filename.concat (Dir.path dir) base in
@@ -109,9 +114,12 @@ let prepend_add dir =
     (Misc.normalized_unit_filename base)
   ) (Dir.files dir)
 
+let prepend_add dir =
+  protect (fun () -> prepend_add_unsafe dir)
+
 let prepend_dir dir =
-  prepend_add dir;
   protect (fun () ->
+    prepend_add_unsafe dir;
     if Dir.hidden dir then
       hidden_dirs := !hidden_dirs @ [dir]
     else
@@ -146,8 +154,8 @@ let remove_dir dir =
       reset ();
       visible_dirs := visible;
       hidden_dirs := hidden;
-      List.iter prepend_add hidden;
-      List.iter prepend_add visible
+      List.iter prepend_add_unsafe hidden;
+      List.iter prepend_add_unsafe visible
     end
   )
 
@@ -162,8 +170,8 @@ let init ~visible ~hidden =
     begin try
       visible_dirs := List.rev_map (fun path -> Dir.create ~hidden:false path) visible;
       hidden_dirs := List.rev_map (fun path -> Dir.create ~hidden:true path) hidden;
-      List.iter prepend_add !hidden_dirs;
-      List.iter prepend_add !visible_dirs;
+      List.iter prepend_add_unsafe !hidden_dirs;
+      List.iter prepend_add_unsafe !visible_dirs;
 
     with e ->
       dbg "[init_path] failed to initialize load path state: %s\n" (Printexc.to_string e);
@@ -177,38 +185,46 @@ let init ~visible ~hidden =
   )
 
 let find fn =
-  try
-    if is_basename fn && not !Sys.interactive then
-      fst (find_file_in_cache fn)
-    else
-      (* this triggers file system calls, which may be slow... *)
-      Misc.find_in_path (get_path_list ()) fn
-
-  with Not_found -> begin
-    dbg "[find] attempt to auto-include %s\n" fn;
-    (* may throw Not_found again *)
-    auto_include Dir.find fn
-  end
-
-let find_normalized_with_visibility fn =
-  match Misc.normalized_unit_filename fn with
-  | Error _ -> raise Not_found
-  | Ok fn_uncap ->
+  let get_path_list () =
+    let acc = List.rev_map Dir.path !hidden_dirs in
+    Misc.rev_map_end Dir.path !visible_dirs acc
+  in
+  protect (fun () ->
     try
       if is_basename fn && not !Sys.interactive then
-        find_file_in_cache_uncap fn_uncap
+        fst (find_file_in_cache fn)
       else
-        try
-          (Misc.find_in_path_normalized (get_visible_path_list ()) fn, Load_path.Visible)
-        with
-        | Not_found ->
-          (Misc.find_in_path_normalized (get_hidden_path_list ()) fn, Load_path.Hidden)
+        (* this triggers file system calls, which may be slow... *)
+        Misc.find_in_path (get_path_list ()) fn
 
     with Not_found -> begin
-      dbg "[find_normalized] attempt to auto-include %s\n" fn;
+      dbg "[find] attempt to auto-include %s\n" fn;
       (* may throw Not_found again *)
-      auto_include Dir.find_normalized fn_uncap, Load_path.Visible
+      auto_include Dir.find fn
     end
+  )
+
+let find_normalized_with_visibility fn =
+  protect (fun () ->
+    match Misc.normalized_unit_filename fn with
+    | Error _ -> raise Not_found
+    | Ok fn_uncap ->
+      try
+        if is_basename fn && not !Sys.interactive then
+          find_file_in_cache_uncap fn_uncap
+        else
+          try
+            (Misc.find_in_path_normalized (get_visible_path_list ()) fn, Load_path.Visible)
+          with
+          | Not_found ->
+            (Misc.find_in_path_normalized (get_hidden_path_list ()) fn, Load_path.Hidden)
+
+      with Not_found -> begin
+        dbg "[find_normalized] attempt to auto-include %s\n" fn;
+        (* may throw Not_found again *)
+        auto_include Dir.find_normalized fn_uncap, Load_path.Visible
+      end
+  )
 
 let find_normalized fn = fst (find_normalized_with_visibility fn)
 
